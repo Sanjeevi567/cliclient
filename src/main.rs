@@ -5,11 +5,14 @@ use inquire::{
     Confirm, Password, Select, Text,
 };
 
+use std::fs::OpenOptions;
+use std::io::Write;
+
 //Interneal APIs
 
-use aws_apis::{CredentInitialize,load_credential_from_env,
-    S3Ops,SesOps,RdsOps,MemDbOps,
-    SimpleMail,TemplateMail,Template_,Simple_,
+use aws_apis::{
+    load_credential_from_env, CredentInitialize, MemDbOps, RdsOps, S3Ops, SesOps, SimpleMail,
+    Simple_, TemplateMail, Template_,
 };
 
 #[tokio::main]
@@ -27,10 +30,10 @@ async fn main() {
     ];
     //Intial dummy credentials
     let mut credential = CredentInitialize::default();
-//Using same credentials for the different services.
-    let mut ses_ops: SesOps= SesOps::build(credential.build());
-    let mut s3_ops: S3Ops= S3Ops::build(credential.build());
-    let mut rds_ops:RdsOps= RdsOps::build(credential.build());
+    //Using same credentials for the different services.
+    let mut ses_ops: SesOps = SesOps::build(credential.build());
+    let mut s3_ops: S3Ops = S3Ops::build(credential.build());
+    let mut rds_ops: RdsOps = RdsOps::build(credential.build());
     let mut memdb_ops: MemDbOps = MemDbOps::build(credential.build());
 
     'main: loop {
@@ -143,15 +146,17 @@ async fn main() {
     "Send templated Emails\n",
     "Common Errors\n",
     "Go to main menu\n",
-    "Quit\n"
     ];
                 loop {
-                    let email_choice = Select::new("Operations to perform\n", ses_operations.clone())
-                        .with_help_message("Do not enclose it with quotation marks or add spaces")
-                        .with_vim_mode(true)
-                        .with_page_size(5)
-                        .prompt()
-                        .unwrap();
+                    let email_choice =
+                        Select::new("Operations to perform\n", ses_operations.clone())
+                            .with_help_message(
+                                "Do not enclose it with quotation marks or add spaces",
+                            )
+                            .with_vim_mode(true)
+                            .with_page_size(5)
+                            .prompt()
+                            .unwrap();
 
                     match email_choice {
             "Create a Contact List Name\n" => 
@@ -285,12 +290,12 @@ async fn main() {
                                         false =>{
                                             println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                                             let parse_to_digit = upto.parse::<usize>().unwrap();
-                                            ses_ops.getting_email_addresses_from_provided_list(Some(&list_name), true, Some(parse_to_digit)).await;
+                                            ses_ops.printing_email_addresses_from_provided_list(Some(&list_name), true, Some(parse_to_digit)).await;
 
                                         }
                                         true =>{
                                             println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
-                                            ses_ops.getting_email_addresses_from_provided_list(Some(&list_name), true, None).await;
+                                            ses_ops.printing_email_addresses_from_provided_list(Some(&list_name), true, None).await;
 
                                         }
 
@@ -298,7 +303,7 @@ async fn main() {
 
                             },
                             false =>{
-                            ses_ops.getting_email_addresses_from_provided_list(Some(&list_name), false, None).await;
+                            ses_ops.printing_email_addresses_from_provided_list(Some(&list_name), false, None).await;
   
                             }
                            }
@@ -316,12 +321,12 @@ async fn main() {
                                         false =>{
                                             println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                                             let parse_to_digit = upto.parse::<usize>().unwrap();
-                                            ses_ops.getting_email_addresses_from_provided_list(None, true, Some(parse_to_digit)).await;
+                                            ses_ops.printing_email_addresses_from_provided_list(None, true, Some(parse_to_digit)).await;
 
                                         }
                                         true =>{
                                             println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());  
-                                            ses_ops.getting_email_addresses_from_provided_list(None, true, None).await;
+                                            ses_ops.printing_email_addresses_from_provided_list(None, true, None).await;
 
                                         }
 
@@ -330,7 +335,7 @@ async fn main() {
                             },
                             false =>{
                                 println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
-                                ses_ops.getting_email_addresses_from_provided_list(None, false, None).await;  
+                                ses_ops.printing_email_addresses_from_provided_list(None, false, None).await;  
                             }
                          
 
@@ -507,8 +512,6 @@ async fn main() {
                 let get_template_name = ses_ops.get_template_name();
                 let default_template_name = format!("Default template name is: {}",get_template_name);
                 let default_from_address = format!("Default from_address is: {}",get_from_address);
-            
-
                 let email = Text::new("Enter the email you wish to send\n")
                     .with_placeholder("The email must be verified")
                     .with_formatter(&|str| format!(".....{str}....."))
@@ -695,7 +698,6 @@ async fn main() {
 
          }
          "Go to main menu\n" => continue 'main,
-            "Quit\n" => break 'main,
 
             _ => {}
         }
@@ -717,7 +719,7 @@ async fn main() {
 
                 's3_ops: loop {
                     let s3_choices = Select::new("Operations in S3 service", s3_operations.clone())
-                         .with_page_size(5)
+                        .with_page_size(5)
                         .prompt()
                         .unwrap();
                     match s3_choices {
@@ -876,11 +878,9 @@ async fn main() {
 
                             match (object.is_empty(), bucket_name.is_empty(), key.is_empty()) {
                                 (false, false, false) => {
-                
                                     s3_ops
                                         .upload_content_to_a_bucket(&bucket_name, &object, &key)
                                         .await;
-                                    
                                 }
 
                                 _ => {
@@ -892,7 +892,7 @@ async fn main() {
                         "Download object from bucket\n" => {
                             let get_buckets = s3_ops.get_buckets().await;
                             let available_buckets =
-                                format!("Available buckets in your accout: {:#?}\n", get_buckets);
+                                format!("Available buckets in your account: {:#?}\n", get_buckets);
 
                             let bucket_name = Text::new("Input the bucket name\n")
                                 .with_placeholder(&available_buckets)
@@ -903,7 +903,7 @@ async fn main() {
                                     let get_objects =
                                         s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
                                     let available_objects = format!(
-                                        "Available objects in {bucket_name}\n{:#?}\n",
+                                        "Available keys in {bucket_name}\n{:#?}\n",
                                         get_objects
                                     );
                                     let object = Text::new("Input the object/key to download\n")
@@ -930,57 +930,66 @@ async fn main() {
                             }
                         }
 
-    "Retrieve a presigned URL for an object\n" =>{
+                        "Retrieve a presigned URL for an object\n" => {
+                            let get_bucket_name = s3_ops.get_buckets().await;
+                            let available_bucket_name = format!(
+                                "Available buckets in your account: {:?}",
+                                get_bucket_name
+                            );
+                            let bucket_name = Text::new("Enter the bucket name\n")
+                                .with_placeholder(&available_bucket_name)
+                                .with_help_message("This is where we put the actual data")
+                                .prompt()
+                                .unwrap();
 
-        let get_bucket_name = s3_ops.get_buckets().await;
-        let available_bucket_name = format!(
-            "Available bucket names in your account: {:?}",
-            get_bucket_name
-        );
-        let bucket_name = Text::new("Enter the bucket name\n")
-            .with_placeholder(&available_bucket_name)
-            .with_help_message("This is where we put the actual data")
-            .prompt()
-            .unwrap();
-
-            match bucket_name.is_empty() {
-                false => {
-                    let get_objects =
-                        s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
-                    let available_objects = format!(
-                        "Available objects in {bucket_name}\n{:#?}\n",
-                        get_objects);
-                    let object_name = Text::new("Enter the key or object for which you require a pre-signed URL\n")
+                            match bucket_name.is_empty() {
+                                false => {
+                                    let get_objects =
+                                        s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                                    let available_objects = format!(
+                                        "Available keys in {bucket_name}\n{:#?}\n",
+                                        get_objects
+                                    );
+                                    let object_name = Text::new("Enter the key or object for which you require a pre-signed URL\n")
                         .with_placeholder(&available_objects)
                         .prompt()
                         .unwrap();
 
-                     match object_name.is_empty() {
-                     false => {
-                        let choosing_hour = Text::new("Enter the expiration time for the url in hour\n")
+                                    match object_name.is_empty() {
+                                        false => {
+                                            let choosing_hour = Text::new("Enter the expiration time for the url in hour\n")
                                     .with_placeholder("Integer values should always be non-negative and should not contain any characters\n")
                                     .prompt()
                                     .unwrap();
-                           match choosing_hour.is_empty(){
-                            false =>{
-                                let end_time = choosing_hour.parse::<u64>().unwrap();
-                                s3_ops.get_presigned_url_for_an_object(&bucket_name, &object_name, end_time).await;
-                            },
-                            true => println!("{}\n","the hour can't be empty".red().bold()) 
-                           }     
-                     }
-                    true => println!("{}\n","key/object name can't be empty".red().bold()) 
-                                    }      
-                },
-                true =>{
-                    println!(
-                        "{}\n",
-                        "bucket name can't be empty".red().bold()
-                    )
-                }
-            }
-
-    }
+                                            match choosing_hour.is_empty() {
+                                                false => {
+                                                    let end_time =
+                                                        choosing_hour.parse::<u64>().unwrap();
+                                                    s3_ops
+                                                        .get_presigned_url_for_an_object(
+                                                            &bucket_name,
+                                                            &object_name,
+                                                            end_time,
+                                                        )
+                                                        .await;
+                                                }
+                                                true => println!(
+                                                    "{}\n",
+                                                    "the hour can't be empty".red().bold()
+                                                ),
+                                            }
+                                        }
+                                        true => println!(
+                                            "{}\n",
+                                            "key/object name can't be empty".red().bold()
+                                        ),
+                                    }
+                                }
+                                true => {
+                                    println!("{}\n", "bucket name can't be empty".red().bold())
+                                }
+                            }
+                        }
                         "Go to main\n" => break 's3_ops,
                         _ => {}
                     }
@@ -989,387 +998,692 @@ async fn main() {
 
             "Relational Database Service(RDS) Operations\n" => {
                 let rds_choices = vec![
-                  "Create Db Instance\n",
-                  "Configure Db and Cluster Instance Id\n",
-                  "Describe Db Instance\n",
-                  "Get Database Connection Url\n",
-                  "Start Db Instance\n",
-                  "Stop Db Instance\n",
-                  "Delete Db Instance\n",
-                  "Describe Db Cluster\n",
-                  "Delete Db Cluster\n",
-                  "Go to main menu\n"
+                    "Create Db Instance\n",
+                    "Configure Db and Cluster Instance Id\n",
+                    "Describe Db Instance\n",
+                    "Status of Db Instance\n",
+                    "Retrieving Connection URL Information\n",
+                    "Start Db Instance\n",
+                    "Stop Db Instance\n",
+                    "Modify Database Instance Settings\n",
+                    "Delete Db Instance\n",
+                    "Describe Db Cluster\n",
+                    "Delete Db Cluster\n",
+                    "Go to main menu\n",
                 ];
 
-                loop{
-        let choices = Select::new("Select the operations to execute\n",rds_choices.clone())
-                           .prompt()
-                           .unwrap();
-                  match choices{
-        "Create Db Instance\n" =>{
+                loop {
+                    let choices =
+                        Select::new("Select the operations to execute\n", rds_choices.clone())
+                            .prompt()
+                            .unwrap();
+                    match choices {
+                        "Create Db Instance\n" => {
 
-            let db_instance_identifier = Text::new("Enter the database instance identifier\n")
-                    .with_placeholder("The database instance identifier is later used for all sorts of operations on the database, e.g., 'mydbinstance'")
-                    .prompt()
-                    .unwrap();
-            let engine = Text::new("Select the database engine for your database system\n")
-                     .with_placeholder("Some possible values are: 'mariadb', 'mysql', 'postgres'")
-                     .with_help_message("look here to know more http://tinyurl.com/4h8fcwf6")
-                     .prompt()
-                     .unwrap();
-            let db_name = Text::new("Select the db name for your database\n")
-            .with_placeholder("Some possible values are: 'MySQL', 'MariaDB', 'PostgreSQL'")
-            .with_help_message("look here to know more http://tinyurl.com/4mnhdpkm")
-            .prompt()
-            .unwrap();
-            let storage_type= Text::new("Select the storage type for your database")  
+                            let db_instance_identifier = Text::new("Enter the database instance identifier\n")
+                               .with_placeholder("The DB instance identifier is case-insensitive, but is stored as all lowercase (as in \"mydbinstance\").\nConstraints: 1 to 60 alphanumeric characters or hyphens. First character must be a letter. Can't contain two consecutive hyphens. Can't end with a hyphen")
+                               .prompt()
+                               .unwrap();
+                            let engine =
+                                Text::new("Select the database engine for your database system\n")
+                                    .with_placeholder(
+                                        "Some possible values are: 'mariadb', 'mysql', 'postgres'",
+                                    )
+                                    .with_help_message(
+                                        "look here to know more http://tinyurl.com/4h8fcwf6",
+                                    )
+                                    .prompt()
+                                    .unwrap();
+                            let db_name = Text::new("Select the db name for your database\n")
+                                .with_placeholder(
+                                    "Some possible values are: 'MySQL', 'MariaDB', 'PostgreSQL'",
+                                )
+                                .with_help_message(
+                                    "look here to know more http://tinyurl.com/4mnhdpkm",
+                                )
+                                .prompt()
+                                .unwrap();
+                            let storage_type= Text::new("Select the storage type for your database")  
                      .with_placeholder("The storage type and the next database instance class should be a correct combination for successfully creating a database instance")   
                      .with_help_message("Click here http://tinyurl.com/4h8fcwf6 to learn more") 
                      .prompt()
                      .unwrap();
-            let db_instance_class =  Text::new("Select instance class for your database\n")  
+                            let db_instance_class =  Text::new("Select instance class for your database\n")  
             .with_placeholder("The instance class and the previous storage type should be a correct combination for successfully creating a database instance")   
             .with_help_message("Click here http://tinyurl.com/29am8kup to learn more") 
             .prompt()
-            .unwrap(); 
+            .unwrap();
 
-            let allocated_storage = Text::new("Specify the storage capacity for your database in gigabytes, using numerical digits\n")  
+                            let allocated_storage = Text::new("Specify the storage capacity for your database in gigabytes, using numerical digits\n")  
             .with_placeholder("The storage requirements depend on your specific use cases and the storage type you have previously selected")   
             .with_help_message("Click here http://tinyurl.com/4h8fcwf6 to learn more") 
             .prompt()
-            .unwrap(); 
-          
-            let username = Text::new("Select the username for your database\n")  
+            .unwrap();
+
+                            let username = Text::new("Select the username for your database\n")  
             .with_placeholder("The username and password options are required parameters for the database instance")  
             .prompt()
-            .unwrap(); 
-            let password = Text::new("Select the password for your database\n")  
+            .unwrap();
+                            let password = Text::new("Select the password for your database\n")  
             .with_placeholder("Once you have created the database instance, you can obtain the database URL by selecting the 'Get Database URL' option")  
             .prompt()
             .unwrap();
-            
-match (
-    db_instance_identifier.is_empty(),db_instance_class.is_empty(),storage_type.is_empty(),
-    allocated_storage.is_empty(),db_name.is_empty(),engine.is_empty(),username.is_empty(),
-    password.is_empty()
-){
-(false,false,false,false,false,false,false,false) => {
-    let storage = allocated_storage.parse::<i32>().unwrap();
-    
-     rds_ops.create_db_instance(&db_instance_identifier,&db_name, &db_instance_class, &engine,
-         &username, &password,storage,&storage_type).await;
 
-},
-_ => println!("{}\n","Fields cannot be left empty.".red().bold())
-}
-                    }
+                            match (
+                                db_instance_identifier.is_empty(),
+                                db_instance_class.is_empty(),
+                                storage_type.is_empty(),
+                                allocated_storage.is_empty(),
+                                db_name.is_empty(),
+                                engine.is_empty(),
+                                username.is_empty(),
+                                password.is_empty(),
+                            ) {
+                                (false, false, false, false, false, false, false, false) => {
+                                    let storage = allocated_storage.parse::<i32>().unwrap();
 
-   "Configure Db and Cluster Instance Id\n" =>{
-    let db_instance_identifier = Text::new("Enter the database instance identifier\n")
+                                    rds_ops
+                                        .create_db_instance(
+                                            &db_instance_identifier,
+                                            &db_name,
+                                            &db_instance_class,
+                                            &engine,
+                                            &username,
+                                            &password,
+                                            storage,
+                                            &storage_type,
+                                        )
+                                        .await;
+
+                            let mut file = OpenOptions::new().create(true).write(true)
+                                                 .read(true).open("./create_db_instance_choices.txt").unwrap();
+                            let choices = format!("Db Instance Identifier: {db_instance_identifier}\nDb Engine: {engine}\nDb Instance Class: {db_instance_class}\nAllocated Storage: {storage}\nStorage Type: {storage_type}\nMaster Username: {username}\nMaster Password: {password}\nDb Name: {db_name}");
+                            
+                           match file.write_all(choices.as_bytes()){
+                               Ok(_) => {
+                                let colored_msg ="The choices have been saved to the current directory for your reference\n".green().bold();
+                                println!("{colored_msg}");
+                               }
+                               Err(_) => println!("Error while writting file to the current directory\n")
+                            }
+                            
+                                }
+                                _ => println!("{}\n", "Fields cannot be left empty.".red().bold()),
+                            }
+                        }
+
+                        "Configure Db and Cluster Instance Id\n" => {
+                            let db_instance_identifier = Text::new("Enter the database instance identifier\n")
      .with_placeholder("The database instance identifier is later used for all sorts of operations on the database, e.g., 'mydbinstance'")
      .prompt_skippable()
      .unwrap()
      .unwrap();
-    let db_cluster_identifier = Text::new("Enter the database cluster identifier, which is different from the database instance identifier\n")  
+                            let db_cluster_identifier = Text::new("Enter the database cluster identifier, which is different from the database instance identifier\n")  
      .with_placeholder("This is the identifier you created when setting up a database cluster")
      .prompt_skippable()
      .unwrap()
      .unwrap();
- match (db_instance_identifier.is_empty(),db_cluster_identifier.is_empty()){
-    (false,false) => {
-        rds_ops.set_db_instance_id(&db_instance_identifier);
-        rds_ops.set_db_cluster_id(&db_cluster_identifier);
-        let colored_default_cluster_id = &db_cluster_identifier.green().bold();
-        let colored_default_instance_id = &db_instance_identifier.green().bold();
-        println!("Default Instance Id: {colored_default_instance_id}\n");
-        println!("Default Cluster Id: {colored_default_cluster_id}\n");
-        println!("{}\n","Be sure to check the placeholder for default values, allowing you to skip using the default value".bright_blue());
-    },
-    (true,false) => {
-        rds_ops.set_db_cluster_id(&db_cluster_identifier);
-        let colored_default_cluster_id = &db_cluster_identifier.green().bold();
-        println!("Default Cluster Id: {colored_default_cluster_id}\n");
-        println!("{}\n","Be sure to check the placeholder for default values, allowing you to skip using the default value".bright_blue());
-    },
-    (false,true) => {
-        rds_ops.set_db_instance_id(&db_instance_identifier);
-        let colored_default_instance_id = &db_instance_identifier.green().bold();
-        println!("Default Db Instance Id: {colored_default_instance_id}\n");
-        println!("{}\n","Be sure to check the placeholder for default values, allowing you to skip using the default value".bright_blue());
-        
-    },
-    _ => println!("{}\n","both fiedls can't be empty".red().bold())
- }
-   }
+                            match (
+                                db_instance_identifier.is_empty(),
+                                db_cluster_identifier.is_empty(),
+                            ) {
+                                (false, false) => {
+                                    rds_ops.set_db_instance_id(&db_instance_identifier);
+                                    rds_ops.set_db_cluster_id(&db_cluster_identifier);
+                                    let colored_default_cluster_id =
+                                        &db_cluster_identifier.green().bold();
+                                    let colored_default_instance_id =
+                                        &db_instance_identifier.green().bold();
+                                    println!(
+                                        "Default Instance Id: {colored_default_instance_id}\n"
+                                    );
+                                    println!("Default Cluster Id: {colored_default_cluster_id}\n");
+                                    println!("{}\n","Be sure to check the placeholder for default values, allowing you to skip using the default value".bright_blue());
+                                }
+                                (true, false) => {
+                                    rds_ops.set_db_cluster_id(&db_cluster_identifier);
+                                    let colored_default_cluster_id =
+                                        &db_cluster_identifier.green().bold();
+                                    println!("Default Cluster Id: {colored_default_cluster_id}\n");
+                                    println!("{}\n","Be sure to check the placeholder for default values, allowing you to skip using the default value".bright_blue());
+                                }
+                                (false, true) => {
+                                    rds_ops.set_db_instance_id(&db_instance_identifier);
+                                    let colored_default_instance_id =
+                                        &db_instance_identifier.green().bold();
+                                    println!(
+                                        "Default Db Instance Id: {colored_default_instance_id}\n"
+                                    );
+                                    println!("{}\n","Be sure to check the placeholder for default values, allowing you to skip using the default value".bright_blue());
+                                }
+                                _ => println!("{}\n", "both fiedls can't be empty".red().bold()),
+                            }
+                        }
 
-   "Get Database Connection Url\n" =>{
-    let db_instance_identifier = Text::new("Enter the database instance identifier\n")  
-    .with_placeholder("This is the identifier you created when setting up a database instance")
-    .prompt_skippable()
-    .unwrap()
-    .unwrap();
-    let instance_info = match db_instance_identifier.is_empty(){
-       false =>  rds_ops.describe_db_instance(Some(&db_instance_identifier)).await,
- 
-       true =>  rds_ops.describe_db_instance(None).await 
-       };
+                        "Retrieving Connection URL Information\n" => {
+                            let default_db_instance = format!("Default Db Instance Id: {}",rds_ops.get_db_instance_id());
+                            let db_instance_identifier = Text::new("Enter the database instance identifier\n")  
+                           .with_placeholder(&default_db_instance)
+                            .prompt_skippable()
+                            .unwrap()
+                             .unwrap();
 
-       let colored_database_url = instance_info.get_database_url().green().bold();
-       println!("Your data base url is: {}\n",colored_database_url);
-   }
+                            match db_instance_identifier.is_empty() {
+         false => {
+                         let postgres_choice = Confirm::new("Are you in need of a PostgreSQL connection URL?\n")
+                             .with_placeholder("yes means ,proceed with the PostgreSQL option, No means you'll receive enough information about the database instance")
+                             .prompt()
+                             .unwrap();
 
-    "Describe Db Instance\n" =>{
-        let db_instance_identifier = Text::new("Enter the database instance identifier\n")  
-        .with_placeholder("This is the identifier you created when setting up a database instance")
-        .prompt_skippable()
-        .unwrap()
-        .unwrap(); 
+                       match postgres_choice{
+                            true => {
 
-      let instance_info = match db_instance_identifier.is_empty(){
-        false =>  rds_ops.describe_db_instance(Some(&db_instance_identifier)).await,
+                             let password = Text::new("Enter the password\n")  
+                              .with_placeholder("Please note that a password is necessary to generate the connection URL for the postgres database\n")
+                              .prompt()
+                              .unwrap();
+                            let instance_info =rds_ops.describe_db_instance(Some(&db_instance_identifier)).await;
+                            let username = instance_info.get_username();
+                            let endpoint_with_port = instance_info.get_endpoint_with_port();
+                            let db_name = instance_info.get_db_name();
 
-        true =>  rds_ops.describe_db_instance(None).await
-    };
-        let colored_url =instance_info.get_database_url().green().bold();
-        let colored_zone = instance_info.get_availability_zone().green().bold();
-        let colored_port =instance_info.get_port().to_string().green().bold();
-        let colored_class = instance_info.get_instance_class().map(|str|str.green().bold());
-        let colored_db =instance_info.get_db_name().map(|str|str.green().bold());
-        let colored_status = instance_info.get_instance_status().map(|str|str.green().bold());
-        println!("Address: {}\nPort: {}\nZone: {}\nInstance class: {:?}\nDb name: {:?}\nStatus of db instance: {:?}\n",
-        colored_url ,colored_port, colored_zone,colored_class,colored_db,colored_status
-        );
-    
-    }
+                            match(username,endpoint_with_port,db_name,password.is_empty()){
+                                (Some(username),Some(endpoint_with_port),Some(db_name),false) => {
+                                    let database_url = format!("postgres://{username}:{password}@{endpoint_with_port}/{db_name}").green().bold();
+                                    println!("The database url is: {}\n",database_url);
+                                    rds_ops.status_of_db_instance(Some(&db_instance_identifier)).await;
+                                },
+                                _ => println!("Database url can't be generated\n")
+                            }
+                            }
+                            false => {
+                                let instance_info =rds_ops.describe_db_instance(Some(&db_instance_identifier)).await;
+                                let username = instance_info.get_username();
+                                let endpoint_with_port = instance_info.get_endpoint_with_port();
+                                let db_name = instance_info.get_db_name();
+                                
+                                match(username,endpoint_with_port,db_name){
+                                    (Some(username),Some(endpoint_with_port),Some(db_name)) => {
+                                        let colored_username = username.blue().bold();
+                                        let colored_endpoint_with_port = endpoint_with_port.blue().bold();
+                                        let colored_db_name = db_name.blue().bold();
+                                        println!("Username: {colored_username}\n");
+                                        println!("Endpoint with port: {colored_endpoint_with_port}\n");
+                                        println!("Db Name: {colored_db_name}\n");
+                                        rds_ops.status_of_db_instance(Some(&db_instance_identifier)).await;
+                                    },
+                                    _ => println!("Database url can't be generated\n")
+                                }
+                            }
+                         }
+                                }
 
-    "Start Db Instance\n" => {
-        let default_instance_id = format!("The default instance ID is set to: {}\n",rds_ops.get_db_instance_id());
-        let db_instance_identifier = Text::new("Enter the database instance identifier\n")  
-        .with_placeholder(&default_instance_id)
-        .prompt_skippable()
-        .unwrap()
-        .unwrap(); 
-    let instance_info =  match db_instance_identifier.is_empty(){
-        false => rds_ops.start_db_instance(Some(&db_instance_identifier)).await,
-        true => rds_ops.start_db_instance(None).await
-    };
-    let colored_status = instance_info.map(|status|status.green().bold());
-    println!("Status of Db Instance: {:?}\n",colored_status);
+        true => {
+                                    let postgres_choice = Confirm::new("Are you in need of a PostgreSQL connection URL?\n")
+                                    .with_placeholder("yes means ,proceed with the PostgreSQL option, No means you'll receive enough information about the database instance")
+                                    .prompt()
+                                    .unwrap();
+       
+                              match postgres_choice{
+                                   true => {
+       
+                                    let password = Text::new("Enter the password\n")  
+                                     .with_placeholder("Please note that a password is necessary to generate the connection URL for the postgres database\n")
+                                     .prompt()
+                                     .unwrap();
+                                   let instance_info =rds_ops.describe_db_instance(None).await;
+                                   let username = instance_info.get_username();
+                                   let endpoint_with_port = instance_info.get_endpoint_with_port();
+                                   let db_name = instance_info.get_db_name();
+       
+                                   match(username,endpoint_with_port,db_name,password.is_empty()){
+                                       (Some(username),Some(endpoint_with_port),Some(db_name),false) => {
+                                           let database_url = format!("postgres://{username}:{password}@{endpoint_with_port}/{db_name}").green().bold();
+                                           println!("The database url is: {}\n",database_url);
+                                           rds_ops.status_of_db_instance(None).await;
+                                       },
+                                       _ => println!("Database url can't be generated\n")
+                                   }
+                                   }
+                                   false => {
+                                       let instance_info =rds_ops.describe_db_instance(Some(&db_instance_identifier)).await;
+                                       let username = instance_info.get_username();
+                                       let endpoint_with_port = instance_info.get_endpoint_with_port();
+                                       let db_name = instance_info.get_db_name();
+                                       
+                                       match(username,endpoint_with_port,db_name){
+                                           (Some(username),Some(endpoint_with_port),Some(db_name)) => {
+                                               let colored_username = username.blue().bold();
+                                               let colored_endpoint_with_port = endpoint_with_port.blue().bold();
+                                               let colored_db_name = db_name.blue().bold();
+                                               println!("Username: {colored_username}\n");
+                                               println!("Endpoint with port: {colored_endpoint_with_port}\n");
+                                               println!("Db Name: {colored_db_name}\n");
+                                               rds_ops.status_of_db_instance(Some(&db_instance_identifier)).await;
+                                           },
+                                           _ => println!("Database url can't be generated\n")
+                                       }
+                                   }
+                                }
+                                }
+                            }
+                    
+                        }
 
-    }
+                        "Describe Db Instance\n" => {
+                            let default_db_instance = format!("Default Db Instance Id: {}",rds_ops.get_db_instance_id());
+                            let db_instance_identifier = Text::new("Enter the database instance identifier\n")  
+                            .with_placeholder(&default_db_instance)
+                            .prompt_skippable()
+                            .unwrap()
+                            .unwrap();
 
-    "Stop Db Instance\n" => {
-        let default_instance_id = format!("The default instance ID is set to: {}\n",rds_ops.get_db_instance_id());
-        let db_instance_identifier = Text::new("Enter the database instance identifier for which you want to stop temporarily\n")  
-        .with_placeholder(&default_instance_id)
-        .prompt_skippable()
-        .unwrap()
-        .unwrap(); 
-    let instance_info = match db_instance_identifier.is_empty(){
-        false => rds_ops.stop_db_instance(Some(&db_instance_identifier)).await,
-        true => rds_ops.stop_db_instance(None).await
-    };
-    let colored_status = instance_info.map(|status|status.green().bold());
-    println!("Status of Db Instance: {:?}\n",colored_status);
+                            let instance_info = match db_instance_identifier.is_empty() {
+                                false => {
+                                    rds_ops
+                                        .describe_db_instance(Some(&db_instance_identifier))
+                                        .await
+                                }
 
-    }
-    "Delete Db Instance\n" => {
-        let default_instance_id = format!("The default instance ID is set to: {}\n",rds_ops.get_db_instance_id());
-        let db_instance_identifier = Text::new("Enter the database instance identifier you wish to delete permanently\n")  
-        .with_placeholder(&default_instance_id)
-        .prompt_skippable()
-        .unwrap()
-        .unwrap(); 
-   let instance_info =  match db_instance_identifier.is_empty(){
-        false => rds_ops.delete_db_instance(Some(&db_instance_identifier)).await,
-        true =>  rds_ops.delete_db_instance(None).await
-    };
-    let colored_status = instance_info.map(|status|status.green().bold());
-    println!("Status of Db Instance: {:?}\n",colored_status);
+                                true => rds_ops.describe_db_instance(None).await,
+                            };
+                            let endpoint_with_port = instance_info.get_endpoint_with_port();
+                            let zone = instance_info.get_availability_zone();
+                            let class = instance_info.get_instance_class();
+                            let db_name = instance_info.get_db_name();
+                            let status = instance_info .get_instance_status();
+                            println!("EndointWithPort: {:?}\nZone: {:?}\nInstance class: {:?}\nDb name: {:?}\nStatus of db instance: {:?}\n",
+                            endpoint_with_port,zone,class,db_name,status);
+                        }
 
-    }
-    "Describe Db Cluster\n" => {
-        let default_cluster_id = format!("The default cluster ID is set to: {}\n",rds_ops.get_db_cluster_id());
-        let db_cluster_identifier = Text::new("Enter the database cluster identifier, which is different from the database instance identifier\n")  
-        .with_placeholder(&default_cluster_id)
-        .prompt_skippable()
-        .unwrap()
-        .unwrap(); 
-   let cluster_info = match db_cluster_identifier.is_empty(){
-        false => rds_ops.describe_db_cluster(Some(&db_cluster_identifier)).await,
-        true => rds_ops.describe_db_cluster(None).await
-    };
+                        "Start Db Instance\n" => {
+                            let default_instance_id = format!(
+                                "The default instance ID: {} and the current status db instance:\n",
+                                rds_ops.get_db_instance_id(),
+                            );
+                            let db_instance_identifier =
+                                Text::new("Enter the database instance identifier\n")
+                                    .with_placeholder(&default_instance_id)
+                                    .with_help_message("The status of the DB instance should be \"stopped\"; otherwise, this operation will result in a panic (the Rust way of handling runtime exceptions).")
+                                    .prompt_skippable()
+                                    .unwrap()
+                                    .unwrap();
+                        match db_instance_identifier.is_empty() {
+                                false => {
+                                
+                                    rds_ops
+                                        .start_db_instance(Some(&db_instance_identifier))
+                                        .await
+                                }
+                                true => rds_ops.start_db_instance(None).await,
+                            }
+                        }
 
-    cluster_info.into_iter()
-    .for_each(|dbclusterinfo|{
-        let colored_status = dbclusterinfo.get_status();
-        let instance_members = dbclusterinfo.get_db_members(); 
-        let colored_msg = "Status of Db Cluster: ".blue().bold();           
-        println!("{}{:?}\n",colored_msg,colored_status);
-        println!("{}\n","Db Instances info:".blue().bold());
-        instance_members.into_iter()
-        .for_each(|db_instance_info|{
-            let colored_id = db_instance_info.green().bold();
-            println!("{colored_id}\n");
-        })
+                        "Stop Db Instance\n" => {
+                            let default_instance_id = format!(
+                                "The default instance ID: {}\n",
+                                rds_ops.get_db_instance_id()
+                            );
+                            let db_instance_identifier = Text::new("Enter the database instance identifier for which you want to stop temporarily\n")  
+                            .with_placeholder(&default_instance_id)
+                            .with_help_message("The status of the DB instance should be \"available\"; otherwise, this operation will result in a panic (the Rust way of handling runtime exceptions).")
+                            .prompt_skippable()
+                            .unwrap()
+                            .unwrap();
+                       match db_instance_identifier.is_empty() {
+                                false => rds_ops.stop_db_instance(Some(&db_instance_identifier)).await,
+                                true => rds_ops.stop_db_instance(None).await,
+                            }
+                        }
+                 "Modify Database Instance Settings\n" => {
 
-    });
+                    let db_instance_identifier = Text::new("Enter the DB instance ID you wish to modify\n")
+                                .with_placeholder("You can modify only master password\n")
+                                .prompt()
+                                .unwrap();
+                    let master_password = Text::new("Enter the new master password to replace the old one\n")
+                                    .with_placeholder("Please remember this password, as it is used to connect to various database instances\n",)
+                                    .prompt()
+                                    .unwrap();
+                    let apply = Confirm::new("Would you like to apply the changes immediately, or would you prefer to have Amazon Web Services do it later?\n")
+                                .with_placeholder("Select 'Yes' to apply immediately or 'No' to have it done later by AWS")
+                                .prompt()
+                                .unwrap();
+                      match  (db_instance_identifier.is_empty(),master_password.is_empty()){
+                        (false,false) => rds_ops.modify_db_instance(&db_instance_identifier,&master_password,apply).await,
+                        _ => println!("{}\n", "Fields cannot be left empty.".red().bold()),
+                      }   
+                      
+                        }
 
-    }
-    "Delete Db Cluster\n" => {
-        let default_cluster_id = format!("The default cluster ID is set to: {}\n",rds_ops.get_db_cluster_id());
-        let db_cluster_identifier = Text::new("Enter the database cluster identifier, which is different from the database instance identifier\n")  
-        .with_placeholder(&default_cluster_id)
-        .prompt_skippable()
-        .unwrap()
-        .unwrap(); 
-  let cluster_info = match db_cluster_identifier.is_empty(){
-        false => rds_ops.delete_db_cluster(Some(&db_cluster_identifier)).await,
-        true =>  rds_ops.delete_db_cluster(None).await
-    };
+                        "Delete Db Instance\n" => {
+                            let default_instance_id = format!(
+                                "The default instance ID: {}\n",
+                                rds_ops.get_db_instance_id()
+                            );
+                            let db_instance_identifier = Text::new("Enter the database instance identifier you wish to delete permanently\n")  
+                            .with_placeholder(&default_instance_id)
+                            .prompt_skippable()
+                            .unwrap()
+                            .unwrap();
+                             match db_instance_identifier.is_empty() {
+                                false => rds_ops.delete_db_instance(Some(&db_instance_identifier)).await,
+                    
+                                true => rds_ops.delete_db_instance(None).await,
+                            }
+                        }
 
-    let colored_status = cluster_info.get_status()
-    .map(|status|status.green().bold());
-   let instance_members = cluster_info.get_db_members();
-   println!("Status of Db Cluster: {:?}\n",colored_status);
-   println!("{}\n","Db Instances info".blue().bold());
-    instance_members.into_iter() 
-    .for_each(|db_instance_id|{
-     let colored_instance_id = db_instance_id.green().bold(); 
-     println!("Db Instance Id: {}\n",colored_instance_id);
-      });
-        
-    }
-       "Go to main menu\n" => continue 'main,
+                     "Status of Db Instance\n" => {
+                        let default_db_instance = format!("Default Db Instance Id: {}",rds_ops.get_db_instance_id());
+                        let db_instance_identifier = Text::new("Enter the database instance identifier\n")  
+                        .with_placeholder(&default_db_instance)
+                        .prompt_skippable()
+                        .unwrap()
+                        .unwrap();
 
-                    _ => println!("Never reach")
-                  }
+                    match db_instance_identifier.is_empty(){
+                        false => rds_ops.status_of_db_instance(Some(&db_instance_identifier)).await,
+                        true => rds_ops.status_of_db_instance(None).await
+                    }
+
+                     }
+
+                        "Describe Db Cluster\n" => {
+                            let default_cluster_id = format!(
+                                "The default cluster ID: {}\n",
+                                rds_ops.get_db_cluster_id()
+                            );
+                            let db_cluster_identifier = Text::new("Enter the database cluster identifier, which is different from the database instance identifier\n")  
+                             .with_placeholder(&default_cluster_id)
+                              .prompt_skippable()
+                               .unwrap()
+                               .unwrap();
+                            let cluster_info = match db_cluster_identifier.is_empty() {
+                                false => {
+                                    rds_ops
+                                        .describe_db_cluster(Some(&db_cluster_identifier))
+                                        .await
+                                }
+                                true => rds_ops.describe_db_cluster(None).await,
+                            };
+
+                            cluster_info.into_iter().for_each(|dbclusterinfo| {
+                                let colored_status = dbclusterinfo.get_status();
+                                let instance_members = dbclusterinfo.get_db_members();
+                                let colored_msg = "Status of Db Cluster: ".blue().bold();
+                                println!("{}{:?}\n", colored_msg, colored_status);
+                                println!("{}\n", "Db Instances info:".blue().bold());
+                                instance_members.into_iter().for_each(|db_instance_info| {
+                                    let colored_id = db_instance_info.green().bold();
+                                    println!("{colored_id}\n");
+                                })
+                            });
+                        }
+                        "Delete Db Cluster\n" => {
+                            let default_cluster_id = format!(
+                                "The default cluster ID: {}\n",
+                                rds_ops.get_db_cluster_id()
+                            );
+                            let db_cluster_identifier = Text::new("Enter the database cluster identifier, which is different from the database instance identifier\n")  
+                             .with_placeholder(&default_cluster_id)
+                             .prompt_skippable()
+                             .unwrap()
+                             .unwrap();
+                            let cluster_info = match db_cluster_identifier.is_empty() {
+                                false => {
+                                    rds_ops
+                                        .delete_db_cluster(Some(&db_cluster_identifier))
+                                        .await
+                                }
+                                true => rds_ops.delete_db_cluster(None).await,
+                            };
+
+                            let colored_status = cluster_info
+                                .get_status()
+                                .map(|status| status.green().bold());
+                            let instance_members = cluster_info.get_db_members();
+                            println!("Status of Db Cluster: {:?}\n", colored_status);
+                            println!("{}\n", "Db Instances info".blue().bold());
+                            instance_members.into_iter().for_each(|db_instance_id| {
+                                let colored_instance_id = db_instance_id.green().bold();
+                                println!("Db Instance Id: {}\n", colored_instance_id);
+                            });
+                        }
+                        "Go to main menu\n" => continue 'main,
+
+                        _ => println!("Never reach"),
+                    }
                 }
-
             }
 
             "MemoryDb Operations\n" => {
                 let memdb_choices = vec![
                     "Create MemDb Cluster\n",
+                    "Create MemDb User\n",
                     "Describe MemDb Cluster\n",
+                    "Describe MemDb User\n",
                     "Describe Snapshots of MemDb Cluster\n",
                     "Retrieve the database URL for connection\n",
+                    "Delete MemDb User\n",
                     "Delete Cluster\n",
-                    "Go To Main Menu\n"
+                    "Go To Main Menu\n",
                 ];
 
-                loop{
-                    let choices = Select::new("Select the operations to execute\n",memdb_choices.clone())
-                           .prompt()
-                           .unwrap();
+                loop {
+                    let choices =
+                        Select::new("Select the operations to execute\n", memdb_choices.clone())
+                            .prompt()
+                            .unwrap();
 
+                    match choices {
+                        "Create MemDb Cluster\n" => {
+                            let cluster_name = Text::new("Enter the cluster name\n")
+                                .with_placeholder("The name must be uniquely identifiable")
+                                .prompt()
+                                .unwrap();
+                            let possible_values = vec![
+                                "db.t4g.small",
+                                "db.r6g.large",
+                                "db.r6g.xlarge",
+                                "db.r6g.2xlarge",
+                            ];
+                            let possible_values =
+                                format!("Some possible Values are: {:#?}\n", possible_values);
+                            let node_type =
+                                Text::new("Select the node type for your database system\n")
+                                    .with_placeholder(&possible_values)
+                                    .with_help_message(
+                                        "look here to know more https://tinyurl.com/axy83wff",
+                                    )
+                                    .prompt()
+                                    .unwrap();
 
-                   match choices{
-
-                    "Create MemDb Cluster\n" => {
-                        let cluster_name = Text::new("Enter the cluster name\n")
-                        .with_placeholder("The name must be uniquely identifiable")
-                        .prompt()
-                        .unwrap();
-                       let possible_values = vec!["db.t4g.small","db.r6g.large","db.r6g.xlarge","db.r6g.2xlarge"];
-                       let possible_values = format!("Some possible Values are: {:#?}\n",possible_values);
-                        let node_type = Text::new("Select the node type for your database system\n")
-                         .with_placeholder(&possible_values)
-                         .with_help_message("look here to know more https://tinyurl.com/axy83wff")
-                         .prompt()
-                         .unwrap();
-                        
-                        let acl_name = Text::new("Specify the name of the Access Control List (ACL) to associate with the cluster\n")
+                            let acl_name = Text::new("Specify the name of the Access Control List (ACL) to associate with the cluster\n")
                         .with_placeholder("Acl name is created through the aws console of memdb.")
                         .with_help_message("look here to know more https://tinyurl.com/yn3n4wya")
                         .prompt()
                         .unwrap();
 
-                        match (cluster_name.is_empty(),node_type.is_empty(),acl_name.is_empty()){
-                            (false,false,false) => {
-                                memdb_ops.create_memdb_cluster(&node_type, &cluster_name,&acl_name).await;
-                            },
-                            _ => println!("{}\n","Fields cannot be left empty.".red().bold())
+                            match (
+                                cluster_name.is_empty(),
+                                node_type.is_empty(),
+                                acl_name.is_empty(),
+                            ) {
+                                (false, false, false) => {
+                                    memdb_ops
+                                        .create_memdb_cluster(&node_type, &cluster_name, &acl_name)
+                                        .await;
+                                }
+                                _ => println!("{}\n", "Fields cannot be left empty.".red().bold())
+                            }
                         }
-                           
-                    }
+                "Create MemDb User\n" => {
+                    let user_name = Text::new("Please provide a name for this MemDB user\n")
+                        .with_placeholder("This name will also serve as the username for the database within a MemDB cluster\n")
+                        .prompt()
+                        .unwrap();
+                    let possible_access_string_values = "The formats\n 'on' -The user is an active user\n '~*' - Access is given to all available keys\n '+@all' - Access is given to all available commands\n";
+                    let access_string = Text::new("Please provide the access string or permission values for this user\n")
+                                       .with_placeholder(possible_access_string_values)
+                                       .with_help_message("Look here to know more https://tinyurl.com/2p9mnm64")
+                                       .prompt()
+                                       .unwrap();
+                    let possible_authenticated_types = "    iam or Iam\n    Password or password\n"; 
+                    let auth_type = Text::new("Specify the authenticated user's type\n")
+                                    .with_placeholder(possible_authenticated_types)
+                                    .with_help_message("Look here to know more https://tinyurl.com/3zaztx97")
+                                    .prompt()
+                                    .unwrap();
+                    let passwords = Text::new("Please enter the passwords for the memdb user\n")
+                                     .with_placeholder("Please remember this password; it's used for authenticating the database in a 'memdb' cluster")
+                                     .with_help_message("Please ensure that your password contains a minimum of 16 characters")
+                                     .prompt()
+                                     .unwrap();
+                  match (user_name.is_empty(),access_string.is_empty(),auth_type.is_empty(),passwords.is_empty()){
+                    (false,false,false,false) => {
+                        memdb_ops.create_memdb_user(&user_name,&access_string,&auth_type,&passwords).await;
+                        let mut file = OpenOptions::new().create(true).write(true)
+                                                 .read(true).open("./create_memdb_user_choices.txt").unwrap();
+                            let choices = format!("Memdb User Name: {user_name}\nAccess String value: {access_string}\nAuthentication Type: {auth_type}\nPasswords: {passwords}\n");
+                            
+                           match file.write_all(choices.as_bytes()){
+                               Ok(_) => {
+                                let colored_msg ="The choices have been saved to the current directory for your reference\n".green().bold();
+                                println!("{colored_msg}");
+                               }
+                               Err(_) => println!("Error while writting file to the current directory\n")
+                            }
 
-                    "Describe MemDb Cluster\n" =>{
+                    }
+                    _ => println!("{}\n", "Fields cannot be left empty.".red().bold())
+
+                  }                   
+                }
+                        
+                "Describe MemDb Cluster\n" => {
                         let cluster_name = Text::new("Enter the cluster name for which you want to retrieve information\n")
+                        .with_placeholder("The cluster anem is generated during the MemDB cluster creation process")
                         .prompt()
                         .unwrap();
 
-                      match cluster_name.is_empty(){
-                             false => {
-                                let info = memdb_ops.describe_memdb_cluster(&cluster_name).await;
-                                info.into_iter()
+                            match cluster_name.is_empty() {
+                                false => {
+                                    let info =
+                                        memdb_ops.describe_memdb_cluster(&cluster_name).await;
+                                    info.into_iter()
                                 .for_each(|memclusterinfo|{
                                      let status = memclusterinfo.get_status().unwrap().green().bold();
                                      let acl_name = memclusterinfo.get_acl_name().unwrap().green().bold();
                                      println!("Status of MemdbCluster: {}\nAccess Control List(ACL) name: {}\n",status,acl_name);
                                 });
-                             }
+                                }
 
-                             true => println!("{}\n","The cluster name field can't be empty".red().bold())
-                      }
-                    }
-
-          "Describe Snapshots of MemDb Cluster\n" => {
-            let cluster_name = Text::new("Enter the cluster name for which you want to get snapshots\n")
+                                true => println!(
+                                    "{}\n",
+                                    "The cluster name field can't be empty".red().bold()
+                                ),
+                            }
+                        }
+        "Describe MemDb User\n" => {
+            let username = Text::new("Enter the MemDB user name for which you want to retrieve information\n")
+             .with_placeholder("The username is generated during the MemDB user creation process")
             .prompt()
             .unwrap();
+        match username.is_empty(){
+            false => {
+                let user_info = memdb_ops.describe_memdb_user(&username).await;
+                let status = user_info[0].get_status().take();
+                let access_string = user_info[0].get_access_string().take();
+                println!("Status of User: {status:?}\n");
+                println!("Access String for the User: {access_string:?}\n");
+                user_info[0].print_auth_info();
+            }
+            true => println!("{}\n", "Fields cannot be left empty.".red().bold())
+        }
 
-             match cluster_name.is_empty(){
-                false => {
-                    let snapshots = memdb_ops.describe_snapshots(&cluster_name).await;
-                    snapshots.into_iter()
+        }
+
+        "Describe Snapshots of MemDb Cluster\n" => {
+                            let cluster_name = Text::new(
+                                "Enter the cluster name for which you want to get snapshots\n",
+                            )
+                            .with_placeholder("The cluster name is generated during the MemDB cluster creation process.")
+                            .prompt()
+                            .unwrap();
+
+                            match cluster_name.is_empty() {
+                                false => {
+                                    let snapshots =
+                                        memdb_ops.describe_snapshots(&cluster_name).await;
+                                    snapshots.into_iter()
                     .for_each(|snapshot|{
                         let snapshot_name = snapshot.name();
                         let snapshot_status = snapshot.status();
                         println!("Snapshot Name: {snapshot_name:?}\nStatus of snapshot: {snapshot_status:?}\n");
                     });
-                }
-                true => println!("{}\n","Cluster name can't be empty".red().bold())
-                         }
-          }     
+                                }
+                                true => {
+                                    println!("{}\n", "Cluster name can't be empty".red().bold())
+                                }
+                            }
+                        }
 
-            "Retrieve the database URL for connection\n" => {
-            let cluster_name = Text::new("Enter the cluster name for which you need the connection URL\n")
+                        "Retrieve the database URL for connection\n" => {
+                            let cluster_name = Text::new("Enter the cluster name for which you need the connection URL\n")
                         .with_placeholder("The cluster name is the name assigned to the cluster when it was initially created")
                         .prompt()
                         .unwrap();
 
-              match cluster_name.is_empty(){
-                false => {
-                    let info = memdb_ops.describe_memdb_cluster(&cluster_name).await;
-                    let colored_database_url = info[0].get_database_url().green().bold();
-                    println!("The database url is: {}\n",colored_database_url);
-
-                },
-                true => println!("{}\n","MemdDb cluster name can't be empty".red().bold())
-              }      
-
-                    }
-        "Delete Cluster\n" =>{
-            let cluster_name = Text::new("Enter the cluster name for which you want to delete\n")
-            .prompt()
-            .unwrap();
-           let final_snapshot_name = Text::new("Enter the final snapshot name to delete the clusters\n")
-             .prompt()
-             .unwrap();
-
-            match (cluster_name.is_empty(),final_snapshot_name.is_empty()){
-                (false,false) =>{
-                    memdb_ops.delete_memdb_cluster(&cluster_name, &final_snapshot_name).await;
-                },
-                _ => println!("{}\n","Fields cannot be left empty".red().bold())
+                            match cluster_name.is_empty() {
+                                false => {
+                                    let info = memdb_ops.describe_memdb_cluster(&cluster_name).await;
+                                   let endpoint_with_port = info[0].get_endpoint_with_port();
+                                   if let Some(endpoint_port) = endpoint_with_port{
+                                    let redis_url =format!("redis://{endpoint_port}").green().bold();
+                                    println!("The redis database url is: {redis_url}\n");
+                                   }
+                                }
+                                true => println!(
+                                    "{}\n",
+                                    "MemdDb cluster name can't be empty".red().bold()
+                                ),
+                            }
+                        }
+            "Delete MemDb User\n" => {
+            let username = Text::new("Enter the MemDB user name to delete\n") 
+                          .with_placeholder("The username is generated during the MemDB user creation process")
+                           .prompt()
+                           .unwrap();
+              match username.is_empty(){
+                false => memdb_ops.delete_memdb_user(&username).await,
+                true => println!("{}\n", "User name can't be empty".red().bold())
+              }          
+                
             }
+                        "Delete Cluster\n" => {
+                            let cluster_name =
+                                Text::new("Enter the cluster name for which you want to delete\n")
+                                     .with_placeholder("The cluster name is generated during the MemDB cluster creation process.")
+                                    .prompt()
+                                    .unwrap();
+                            let final_snapshot_name =
+                                Text::new("Create snapsho\n")
+                                    .with_placeholder("You can create a final snapshot of your cluster before it’s deleted so you can restore it later")
+                                    .prompt()
+                                    .unwrap();
 
-        }                 
-                     "Go To Main Menu\n" => continue 'main,
-                    _ => println!("Never reach"),
-                     
-                   }
+                            match (cluster_name.is_empty(), final_snapshot_name.is_empty()) {
+                                (false, false) => {
+                                    memdb_ops
+                                        .delete_memdb_cluster(&cluster_name, &final_snapshot_name)
+                                        .await;
+                                }
+                                _ => println!("{}\n", "Fields cannot be left empty".red().bold()),
+                            }
+                        }
+                        "Go To Main Menu\n" => continue 'main,
+                        _ => println!("Never reach"),
+                    }
                 }
             }
 
