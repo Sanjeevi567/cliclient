@@ -12,7 +12,7 @@ use std::io::Write;
 
 use aws_apis::{
     load_credential_from_env, CredentInitialize, MemDbOps, RdsOps, S3Ops, SesOps, SimpleMail,
-    Simple_, TemplateMail, Template_,
+    Simple_, TemplateMail, Template_, PollyOps
 };
 
 #[tokio::main]
@@ -22,6 +22,7 @@ async fn main() {
     let operations: Vec<&str> = vec![
         "Verify the Credential\n",
         "Print Crdentials Information\n",
+        "Amazon Polly Operations\n",
         "AWS Simple Email Service(SES) Operations\n",
         "S3 Bucket Operations\n",
         "Relational Database Service(RDS) Operations\n",
@@ -35,6 +36,7 @@ async fn main() {
     let mut s3_ops: S3Ops = S3Ops::build(credential.build());
     let mut rds_ops: RdsOps = RdsOps::build(credential.build());
     let mut memdb_ops: MemDbOps = MemDbOps::build(credential.build());
+    let mut polly_ops : PollyOps = PollyOps::build(credential.build());
 
     'main: loop {
         let choice = Select::new("Operations to perform\n", operations.clone())
@@ -62,8 +64,8 @@ async fn main() {
                         ses_ops = SesOps::build(config.clone());
                         s3_ops = S3Ops::build(config.clone());
                         rds_ops = RdsOps::build(config.clone());
-                        memdb_ops = MemDbOps::build(config);
-
+                        memdb_ops = MemDbOps::build(config.clone());
+                        polly_ops = PollyOps::build(config);
                         println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".red().bold());
                     }
 
@@ -103,7 +105,8 @@ async fn main() {
                                 credential.update(&access_key, &secret_key, Some(&region));
                                 let config = credential.build();
                                 ses_ops = SesOps::build(config.clone());
-                                s3_ops = S3Ops::build(config);
+                                s3_ops = S3Ops::build(config.clone());
+                                polly_ops = PollyOps::build(config);
                                 println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".red().bold());
                             }
                             _ => println!(
@@ -133,6 +136,65 @@ async fn main() {
                     }
                 }
             }
+
+            "Amazon Polly Operations\n" => {
+                let polly_operations = vec![
+                    "Synthesize Speech\n",
+                    "Describe Voices\n",
+                    "Go To Main Menu\n"
+                ];
+
+                loop{
+                    let polly_choices =
+                    Select::new("Operations to perform\n", polly_operations.clone())
+                        .with_help_message("Do not enclose it with quotation marks or add spaces")
+                        .with_vim_mode(true)
+                        .with_page_size(5)
+                        .prompt()
+                        .unwrap();
+                    match polly_choices{
+
+            "Synthesize Speech\n" =>{
+                let possible_engines = "Possible Engine Values are: 'Standard'\n'Neural'\n";
+                let engine_name = Text::new("Select the speech generation engine name\n")
+                    .with_placeholder(possible_engines)
+                    .prompt()
+                    .unwrap();
+                let valid_formats = "json | mp3 | ogg_vorbis | pcm";
+                let audio_output_format = Text::new("Please select the output format for the generated speech content\n")
+                     .with_placeholder(valid_formats)
+                     .prompt()
+                     .unwrap();
+                let text_to_generate_speech = Text::new("Please upload the text file for which you'd like to generate audio\n")
+                     .with_placeholder("The format of the text content is determined by the file extension. However, if there is only one dot in the path or filename\neg: '/username/text.text' , '/file.ssml'")
+                     .with_help_message("Click here https://tinyurl.com/vwnmsxpp to Learn more")
+                     .prompt()
+                     .unwrap();
+               match (engine_name.is_empty(),audio_output_format.is_empty(),text_to_generate_speech.is_empty()){
+                (false,false,false) => {
+                let mut speech_output = polly_ops.synthesize_speech(&engine_name,&audio_output_format,
+                     &text_to_generate_speech).await;
+                    if let Some(content_type) = speech_output.get_content_type(){
+                        let colored_content_type = content_type.green().bold();
+                        println!("Content Type: {}\n",colored_content_type);
+                    }
+                    let colored_count = speech_output.get_synthesized_count().to_string().green().bold();
+                    println!("Synthesize count: {}\n",colored_count);
+                    speech_output.generate_audio().await;
+
+                },
+                _ => println!("{}\n","Fields can't be left empty".red().bold())
+               }
+            }
+
+            "Go To Main Menu\n" => continue 'main,
+            
+              _ => println!("Never Reach")
+                    }
+                }
+            }
+
+
             "AWS Simple Email Service(SES) Operations\n" => {
                 let ses_operations = vec![
     "Create a Contact List Name\n",
@@ -1458,12 +1520,15 @@ async fn main() {
 
             "MemoryDb Operations\n" => {
                 let memdb_choices = vec![
+                    "Create Access Control List (ACL) for user permissions\n",
                     "Create MemDb Cluster\n",
                     "Create MemDb User\n",
+                    "View ACL Details\n",
                     "Describe MemDb Cluster\n",
                     "Describe MemDb User\n",
                     "Describe Snapshots of MemDb Cluster\n",
                     "Retrieve the database URL for connection\n",
+                    "Delete Access Control List (ACL)\n",
                     "Delete MemDb User\n",
                     "Delete Cluster\n",
                     "Go To Main Menu\n",
@@ -1476,6 +1541,21 @@ async fn main() {
                             .unwrap();
 
                     match choices {
+
+                        "Create Access Control List (ACL) for user permissions\n" =>{
+                            let acl_name = Text::new("Please enter the name for the new ACL you want to create\n")
+                            .with_placeholder("The name must be uniquely identifiable")
+                            .prompt()
+                            .unwrap();
+
+                        match acl_name.is_empty(){
+                            false => {
+                                memdb_ops.create_acl(&acl_name).await;
+                            },
+                            true => println!("{}\n", "ACL name cannot be left empty.".red().bold())
+                        }
+                        }
+
                         "Create MemDb Cluster\n" => {
                             let cluster_name = Text::new("Enter the cluster name\n")
                                 .with_placeholder("The name must be uniquely identifiable")
@@ -1558,6 +1638,47 @@ async fn main() {
                     _ => println!("{}\n", "Fields cannot be left empty.".red().bold())
 
                   }                   
+                }
+
+                "View ACL Details\n" => {
+                    let get_acl_names = memdb_ops.describe_acls().await;
+                    let mut acl_names = Vec::new();
+                    get_acl_names.into_iter()
+                    .for_each(|acl_infos|{
+                     let acl_name = acl_infos.get_acl_name();
+                     if let Some(acl_name_) = acl_name{
+                        acl_names.push(acl_name_);
+                     }
+                    });
+                    let available_acl_names = format!("List of Access Control List (ACL) Names in Your Credentials: {:#?}",acl_names);
+                    let acl_name = Text::new("Please enter the ACL name for the information you seek\n")
+                            .with_placeholder(&available_acl_names)
+                            .prompt()
+                            .unwrap();
+                    match acl_name.is_empty(){
+                        false => {
+                            let acl_info = memdb_ops.describe_acl(&acl_name).await;
+
+                            if let (Some(status),Some(user_names),Some(clusters)) = (acl_info.get_status_of_acl(),acl_info.get_user_names(),acl_info.get_clusters()){
+                                let colored_status = status.green().bold();
+                                println!("The current status of ACL: {}\n",colored_status);
+                                println!("{}\n","Usernames in an Access Control List (ACL)".blue().bold());
+                                user_names.into_iter()
+                                .for_each(|user_name|{
+                                    let colored_user_name = user_name.green().bold();
+                                    println!("{}\n",colored_user_name);
+                                });
+                                println!("{}\n","Clusters in an Access Control List(ACL)".blue().bold());
+                                clusters.into_iter()
+                                .for_each(|cluster|{
+                                   let colored_cluster_name = cluster.green().bold();
+                                   println!("{}\n",colored_cluster_name);
+                                });
+                            }
+                        },
+                        true => println!("{}\n", "ACL name cannot be left empty.".red().bold())
+                    }    
+                    
                 }
                         
                 "Describe MemDb Cluster\n" => {
@@ -1648,7 +1769,48 @@ async fn main() {
                                     "MemdDb cluster name can't be empty".red().bold()
                                 ),
                             }
-                        }
+                       }
+
+            "Delete Access Control List (ACL)\n" => {
+                let get_acl_names = memdb_ops.describe_acls().await;
+                let mut acl_names = Vec::new();
+                get_acl_names.into_iter()
+                .for_each(|acl_infos|{
+                    let acl_name = acl_infos.get_acl_name();
+                    if let Some(acl_name_) = acl_name{
+                     acl_names.push(acl_name_);
+                     }
+                });
+                let available_acl_names = format!("List of Access Control List (ACL) Names in Your Credentials: {:#?}",acl_names);
+                let acl_name = Text::new("Please provide the name of the ACL you wish to delete\n")
+                .with_placeholder(&available_acl_names)
+                .prompt()
+                .unwrap();
+            match acl_name.is_empty(){
+                false => {
+                    let acl_info = memdb_ops.delete_acl(&acl_name).await;
+
+                            if let (Some(status),Some(user_names),Some(clusters)) = (acl_info.get_status_of_acl(),acl_info.get_user_names(),acl_info.get_clusters()){
+                                let colored_status = status.green().bold();
+                                println!("The current status of ACL: {}\n",colored_status);
+                                println!("{}\n","Usernames in an Access Control List (ACL)".blue().bold());
+                                user_names.into_iter()
+                                .for_each(|user_name|{
+                                    let colored_user_name = user_name.green().bold();
+                                    println!("{}\n",colored_user_name);
+                                });
+                                println!("{}\n","Clusters in an Access Control List(ACL)".blue().bold());
+                                clusters.into_iter()
+                                .for_each(|cluster|{
+                                   let colored_cluster_name = cluster.green().bold();
+                                   println!("{}\n",colored_cluster_name);
+                                });
+                            }
+                },
+                true => println!("{}\n", "ACL name can't be empty".red().bold())
+            }
+            }
+
             "Delete MemDb User\n" => {
             let username = Text::new("Enter the MemDB user name to delete\n") 
                           .with_placeholder("The username is generated during the MemDB user creation process")
