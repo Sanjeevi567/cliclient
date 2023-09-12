@@ -140,7 +140,7 @@ async fn main() {
             "Amazon Polly Operations\n" => {
                 let polly_operations = vec![
                     "Synthesize Speech\n",
-                    "Describe Voices\n",
+                    "Retrieve voice information from Amazon Polly\n",
                     "Go To Main Menu\n"
                 ];
 
@@ -185,6 +185,63 @@ async fn main() {
                 },
                 _ => println!("{}\n","Fields can't be left empty".red().bold())
                }
+            }
+
+            "Retrieve voice information from Amazon Polly\n" => {
+
+                let info = polly_ops.describe_voices().await;
+                info.iter()
+                .take(3)
+                .for_each(|voice_info|{
+              
+                 if let (Some(gender),Some(voiceid),Some(lang_code),Some(lang_name),Some(voice_name),Some(engines)) = 
+                  (voice_info.get_gender(),voice_info.get_voiceid(),voice_info.get_language_code(),
+                 voice_info.get_language_name(),voice_info.get_voice_name(),voice_info.get_supported_engines())
+                  {
+                     println!("Gender: {}\nVoiceId: {}\nLanguageCode: {}\nLanguage Name: {}\nVoice Name: {}",
+                     gender.green().bold(),
+                     voiceid.green().bold(),
+                     lang_code.green().bold(),
+                     lang_name.green().bold(),
+                     voice_name.green().bold()
+                    );
+                    engines.iter()
+                    .for_each(|engine|{
+                     println!("Supported Engine: {}\n",engine.green().bold());
+                    });
+                 }
+                });
+                
+                let mut file = OpenOptions::new().create(true).read(true)
+                .write(true).open("voices_info.txt").unwrap();
+            let colored_file_name = "'voices_info.txt'".green().bold();
+            let msg = format!("There is a lot more information available, so it only displays the first three pieces of voice information.\n\nAll the voice information is saved to the current directory as {colored_file_name} instead of cluttering the command-line window");
+            println!("{}\n",msg);
+                info.into_iter()
+                .for_each(|voice_info|{
+                 if let (Some(gender),Some(voiceid),Some(lang_code),Some(lang_name),Some(voice_name),Some(engines)) = 
+                  (voice_info.get_gender(),voice_info.get_voiceid(),voice_info.get_language_code(),
+                 voice_info.get_language_name(),voice_info.get_voice_name(),voice_info.get_supported_engines())
+                  {
+                     let data = format!("Gender:           {}\nVoiceId:          {}\nLanguageCode:     {}\nLanguage Name:    {}\nVoice Name:       {}\nSupported Engine: {}\n\n",
+                     gender,
+                     voiceid,
+                     lang_code,
+                     lang_name,
+                     voice_name,
+                     engines.into_iter().collect::<String>()
+                 );
+                 
+                  file.write_all(data.as_bytes())
+                  .expect("Error while writing data...")
+                 }
+                });
+
+                match file.metadata(){
+                    Ok(_) => println!("{}\n","Content is writen to current directory".green().bold()),
+                    Err(_) => println!("{}\n","Error while writing Data".red().bold())
+                   }
+                
             }
 
             "Go To Main Menu\n" => continue 'main,
@@ -264,7 +321,7 @@ async fn main() {
                                            .with_placeholder("Selecting 'Yes' means you want to receive a verification, while choosing 'No' means your email will be added to the list without verification\n")
                                            .prompt()
                                            .unwrap();
-                                           
+                                          
                                 
                 match (list_name.is_empty(),email.is_empty(),to_verified) {
                     (false,false,false) => {
@@ -1449,7 +1506,6 @@ async fn main() {
                     }
 
                      }
-
                         "Describe Db Cluster\n" => {
                             let default_cluster_id = format!(
                                 "The default cluster ID: {}\n",
@@ -1470,10 +1526,22 @@ async fn main() {
                             };
 
                             cluster_info.into_iter().for_each(|dbclusterinfo| {
-                                let colored_status = dbclusterinfo.get_status();
+                                let status = dbclusterinfo.get_status();
                                 let instance_members = dbclusterinfo.get_db_members();
-                                let colored_msg = "Status of Db Cluster: ".blue().bold();
-                                println!("{}{:?}\n", colored_msg, colored_status);
+                                let cluster_endpoint_with_port = dbclusterinfo.get_cluster_endpoint_with_port();
+                                let master_user_name = dbclusterinfo.get_master_username();
+                                let cluster_db_name = dbclusterinfo.get_db_name();
+                                if let (Some(status),Some(cluster_endpoint),Some(master_username),Some(db_name)) = 
+                                    (status,cluster_endpoint_with_port,master_user_name,cluster_db_name){
+                                   let colored_status = status.green().bold();
+                                   let colored_endpoint = cluster_endpoint.green().bold();
+                                   let colored_username = master_username.green().bold();
+                                   let colored_dbname = db_name.green().bold();
+                                   println!("Current Status of Cluster: {colored_status}\n");
+                                   println!("Cluster endpoint with port: {colored_endpoint}\n");
+                                   println!("Master Username of the Cluster: {colored_username}\n");
+                                   println!("Cluster Database Name: {colored_dbname}\n");
+                                }
                                 println!("{}\n", "Db Instances info:".blue().bold());
                                 instance_members.into_iter().for_each(|db_instance_info| {
                                     let colored_id = db_instance_info.green().bold();
