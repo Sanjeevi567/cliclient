@@ -62,7 +62,7 @@ async fn main() {
                         credential.update(
                             credentials.access_key_id(),
                             credentials.secret_access_key(),
-                            Some(&region),
+                            region.as_deref(),
                         );
                         let config = credential.build();
                         ses_ops = SesOps::build(config.clone());
@@ -367,6 +367,7 @@ async fn main() {
                     "Create Topic\n",
                     "Subscription Under Topic\n",
                     "Add Phone Number\n",
+                    "Verify the pending status of the phone number\n",
                     "Send Messages to Phone Numbers in a Topic\n",
                     "Go To Main Menu\n",
                 ];
@@ -472,6 +473,41 @@ async fn main() {
                                             }
                                         }
                                         false => println!("{}\n", "Sure..".green().bold()),
+                                    }
+                                }
+                                true => {
+                                    println!("{}\n", "Phone Number can't be empty".red().bold())
+                                }
+                            }
+                        }
+                        "Verify the pending status of the phone number\n" => {
+                            let get_numbers = sns_ops.list_sms_sandbox_numbers().await;
+                            let phone_number = Text::new("Please enter the phone number for verification or copy it from the placeholder information\n")
+                            .with_placeholder(&get_numbers)
+                            .with_help_message("Select the phone number with a pending status; otherwise, an error will occur")
+                            .prompt()
+                            .unwrap();
+                            match phone_number.is_empty() {
+                                false => {
+                                    sns_ops.create_sandbox_phone_number(&phone_number).await;
+                                    let info = format!("Please enter the OTP sent to: {phone_number}\n");
+                                    let otp = Text::new(&info)
+                                        .with_placeholder("It consists of 6 digits")
+                                        .prompt()
+                                        .unwrap();
+                                    match otp.is_empty() {
+                                        false => {
+                                            sns_ops.verify_phone_number(&phone_number, &otp).await;
+                                            dotenv().ok();
+                                            let topic_arn = var("TOPIC_ARN").unwrap();
+                                            sns_ops
+                                                .subscription(&topic_arn, "sms", &phone_number)
+                                                .await;
+                                        }
+                                        true => {
+                                            println!("{}\n", "Otp can't be empty".red().bold());
+                                            continue;
+                                        }
                                     }
                                 }
                                 true => {
@@ -1039,7 +1075,7 @@ async fn main() {
                             }
                         }
                         "Default Region Name\n" => {
-                            let default_region_name = s3_ops.get_region_name().green().bold();
+                            let default_region_name = var("REGION").unwrap_or("The region value is read from the .env file in the current directory if it is not provided in the credential file".into());
                             println!("Default Region Name: {default_region_name}\n");
                         }
                         "Get Bucket Lists\n" => {
