@@ -11,8 +11,9 @@ use std::io::Write;
 //Interneal APIs
 
 use aws_apis::{
-    load_credential_from_env, CredentInitialize, MemDbOps, PollyOps, RdsOps, S3Ops, SesOps,
-    SimpleMail, Simple_, SnsOps, TemplateMail, Template_,
+    load_credential_from_env, CredentInitialize, FaceDetails, MemDbOps, PollyOps, RdsOps,
+    RekognitionOps, S3Ops, SesOps, SimpleMail, Simple_, SnsOps, TemplateMail, Template_,
+    TextDetect,
 };
 
 use dotenv::dotenv;
@@ -25,6 +26,7 @@ async fn main() {
         "Verify the Credential\n",
         "Print Credentials Information\n",
         "Amazon Polly Operations\n",
+        "Amazon Rekognition Operations\n",
         "AWS Simple Notification Service(SNS) Operations\n",
         "AWS Simple Email Service(SES) Operations\n",
         "S3 Bucket Operations\n",
@@ -41,10 +43,12 @@ async fn main() {
     let mut memdb_ops: MemDbOps = MemDbOps::build(credential.build());
     let mut polly_ops: PollyOps = PollyOps::build(credential.build());
     let mut sns_ops: SnsOps = SnsOps::build(credential.build());
+    let mut rekognition_ops: RekognitionOps = RekognitionOps::build(credential.build());
 
     'main: loop {
-        let choice = Select::new("Operations to perform\n", operations.clone())
+        let choice = Select::new("Select the option to execute the operation\n", operations.clone())
             .with_help_message("Don't enclose data in quotation marks or add spaces around it in any operations,\nexcept when working with template data.")
+            .with_page_size(10)
             .prompt()
             .unwrap();
 
@@ -70,8 +74,9 @@ async fn main() {
                         rds_ops = RdsOps::build(config.clone());
                         memdb_ops = MemDbOps::build(config.clone());
                         polly_ops = PollyOps::build(config.clone());
-                        sns_ops = SnsOps::build(config);
-                        println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".red().bold());
+                        sns_ops = SnsOps::build(config.clone());
+                        rekognition_ops = RekognitionOps::build(config);
+                        println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".blue().bold());
                     }
                     false => {
                         dotenv().ok();
@@ -88,7 +93,8 @@ async fn main() {
                         rds_ops = RdsOps::build(config.clone());
                         memdb_ops = MemDbOps::build(config.clone());
                         polly_ops = PollyOps::build(config.clone());
-                        sns_ops = SnsOps::build(config);
+                        sns_ops = SnsOps::build(config.clone());
+                        rekognition_ops = RekognitionOps::build(config);
                         println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".red().bold());
                     }
                 }
@@ -122,15 +128,15 @@ async fn main() {
                 ];
 
                 loop {
-                    let polly_choices =
-                        Select::new("Operations to perform\n", polly_operations.clone())
-                            .with_help_message(
-                                "Do not enclose it with quotation marks or add spaces",
-                            )
-                            .with_vim_mode(true)
-                            .with_page_size(5)
-                            .prompt()
-                            .unwrap();
+                    let polly_choices = Select::new(
+                        "Select the option to execute the operation\n",
+                        polly_operations.clone(),
+                    )
+                    .with_help_message("Do not enclose it with quotation marks or add spaces")
+                    .with_vim_mode(true)
+                    .with_page_size(4)
+                    .prompt()
+                    .unwrap();
                     match polly_choices {
                         "Start Synthesizing Speech Task\n" => {
                             let possible_engines =
@@ -138,6 +144,7 @@ async fn main() {
                             let engine_name =
                                 Text::new("Select the speech generation engine name\n")
                                     .with_placeholder(possible_engines)
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt()
                                     .unwrap();
                             match engine_name.is_empty() {
@@ -155,6 +162,7 @@ async fn main() {
                                         "Select the voice for audio generation\n",
                                     )
                                     .with_placeholder(&available_voiceid_specified_engine)
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .with_help_message(
                                         "Click here https://tinyurl.com/3wzknfnw to learn more",
                                     )
@@ -170,6 +178,7 @@ async fn main() {
 
                                     let language_code = Text::new("Select the audio language\n")
                                         .with_placeholder(&available_langcodes_specified_engine)
+                                        .with_formatter(&|str| format!(".....{str}.....\n"))
                                         .with_help_message(
                                             "Click here https://tinyurl.com/27f3zbhd to learn more",
                                         )
@@ -179,17 +188,20 @@ async fn main() {
                                     let possible_text_types = "ssml | text";
                                     let text_type = Text::new("Please provide the text format of the content for which you would like to synthesize audio\n")
                          .with_placeholder(possible_text_types)
+                         .with_formatter(&|str| format!(".....{str}.....\n"))
                          .with_help_message("Click here https://tinyurl.com/zyuwuvhp to learn more")
                          .prompt()
                          .unwrap();
                                     let text_to_generate_speech = Text::new("Please upload the text file for which you'd like to generate audio\n")
                          .with_placeholder("The format of the text content is determined by the preceding selections\n")
                          .with_help_message("Click here https://tinyurl.com/ynjmpur3 to Learn more")
+                         .with_formatter(&|str| format!(".....{str}.....\n"))
                          .prompt()
                          .unwrap();
                                     let valid_formats = "json | mp3 | ogg_vorbis | pcm";
                                     let audio_output_format = Text::new("Please select the output format for the generated speech content\n")
                         .with_placeholder(valid_formats)
+                        .with_formatter(&|str| format!(".....{str}.....\n"))
                         .prompt()
                         .unwrap();
                                     let available_buckets = format!(
@@ -198,6 +210,7 @@ async fn main() {
                                     );
                                     let bucket_name = Text::new("Amazon S3 bucket name to which the output file will be saved\n")
                          .with_placeholder(&available_buckets)
+                         .with_formatter(&|str| format!(".....{str}.....\n"))
                          .with_help_message("The chosen bucket name should be available in different regions to enable access")
                          .prompt()
                          .unwrap();
@@ -361,6 +374,505 @@ async fn main() {
                     }
                 }
             }
+            "Amazon Rekognition Operations\n" => {
+                let rekog_ops = vec![
+                    "Face detection\n",
+                    "Text detection\n",
+                    "Start a face detection task\n",
+                    "Get face detection results\n",
+                    "Start a text detection task\n",
+                    "Get text detection results\n",
+                    "Create Face Liveness task\n",
+                    "Get face liveness results\n",
+                    "Go to the main menu\n",
+                ];
+                loop {
+                    let rekog_choices = Select::new(
+                        "Select the option to execute the operation\n",
+                        rekog_ops.clone(),
+                    )
+                    .with_page_size(9)
+                    .prompt()
+                    .unwrap();
+                    match rekog_choices {
+                        "Face detection\n" => {
+                            let get_buckets = s3_ops.get_buckets().await;
+                            let available_buckets =
+                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+                            let blob = "https://docs.rs/aws-sdk-rekognition/latest/aws_sdk_rekognition/primitives/struct.Blob.html";
+                            let help_message = format!("S3 buckets are employed instead of {blob} types for processing face images");
+                            let bucket_name = Text::new(
+                                "Select the bucket name where the face image is stored\n",
+                            )
+                            .with_placeholder(&available_buckets)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .with_help_message(&help_message)
+                            .prompt()
+                            .unwrap();
+                            match bucket_name.is_empty() {
+                                false => {
+                                    let get_objects =
+                                        s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                                    let available_objects = format!(
+                                        "Available keys in {bucket_name}\n{:#?}\n",
+                                        get_objects
+                                    );
+                                    let object = Text::new("Please input the key or path of the face image within the chosen bucket or copy it from the placeholder information\n")
+                                        .with_placeholder(&available_objects)
+                                        .with_formatter(&|str| format!(".....{str}.....\n"))
+                                        .with_help_message("Don't put quotation marks around the key when pasting")
+                                        .prompt()
+                                        .unwrap();
+                                    match object.is_empty() {
+                                        false => {
+                                            let face_info = rekognition_ops
+                                                .detect_faces(&object, &bucket_name)
+                                                .await;
+                                            face_info.into_iter().for_each(|facedetails| {
+                                                let gender = facedetails.get_gender();
+                                                let age = facedetails.age_range();
+                                                let smile = facedetails.get_smile();
+                                                let beard = facedetails.get_beard();
+
+                                                if let (
+                                                    (Some(gender), Some(gender_confidence)),
+                                                    (Some(age), Some(age_confidence)),
+                                                    (Some(smile), Some(smile_confidence)),
+                                                    (Some(beard), Some(beard_confidence)),
+                                                ) = (gender, age, smile, beard)
+                                                {
+                                                    println!(
+                                                        "Gender: {} and Confidence Level: {}\n",
+                                                        gender.green().bold(),
+                                                        gender_confidence
+                                                            .to_string()
+                                                            .green()
+                                                            .bold()
+                                                    );
+                                                    println!(
+                                                        "Age: {} and Confidence Level: {}\n",
+                                                        age.to_string().green().bold(),
+                                                        age_confidence.to_string().green().bold()
+                                                    );
+                                                    println!(
+                                                        "Beard: {} and Confidence Level: {}\n",
+                                                        beard.to_string().green().bold(),
+                                                        beard_confidence.to_string().green().bold()
+                                                    );
+                                                    println!(
+                                                        "Smile: {} and Confidence Level: {}\n",
+                                                        smile.to_string().green().bold(),
+                                                        smile_confidence.to_string().green().bold()
+                                                    );
+                                                }
+                                            });
+                                        }
+                                        true => {
+                                            println!(
+                                                "{}\n",
+                                                "key/object name can't be empty".red().bold()
+                                            )
+                                        }
+                                    }
+                                }
+                                true => {
+                                    println!("{}\n", "Bucket name can't be empty".red().bold())
+                                }
+                            }
+                        }
+                        "Text detection\n" => {
+                            let get_buckets = s3_ops.get_buckets().await;
+                            let available_buckets =
+                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+                            let blob = "https://docs.rs/aws-sdk-rekognition/latest/aws_sdk_rekognition/primitives/struct.Blob.html";
+                            let help_message = format!("S3 buckets are employed instead of {blob} types for processing texts");
+                            let bucket_name = Text::new(
+                                "Select the bucket name where the text video is stored\n",
+                            )
+                            .with_placeholder(&available_buckets)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .with_help_message(&help_message)
+                            .prompt()
+                            .unwrap();
+                            match bucket_name.is_empty() {
+                                false => {
+                                    let get_objects =
+                                        s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                                    let available_objects = format!(
+                                        "Available keys in {bucket_name}\n{:#?}\n",
+                                        get_objects
+                                    );
+                                    let object = Text::new("Please input the key or path of the text video within the chosen bucket or copy it from the placeholder information\n")
+                                        .with_placeholder(&available_objects)
+                                        .with_formatter(&|str| format!(".....{str}.....\n"))
+                                        .with_help_message("Don't put quotation marks around the key when pasting")
+                                        .prompt()
+                                        .unwrap();
+                                    match object.is_empty() {
+                                        false => {
+                                            let text_info = rekognition_ops
+                                                .detect_texts(&bucket_name, &object)
+                                                .await;
+                                            text_info.into_iter().for_each(|textdetails| {
+                                                let texts = textdetails.get_detected_text();
+                                                let text_type = textdetails.get_text_type();
+                                                let confidence = textdetails.get_confidence();
+
+                                                if let (
+                                                    Some(text),
+                                                    Some(text_type),
+                                                    Some(confidence),
+                                                ) = (texts, text_type, confidence)
+                                                {
+                                                    println!(
+                                                        "Detected Text: {}\n",
+                                                        text.green().bold(),
+                                                    );
+                                                    println!(
+                                                        "Text Type: {}\n",
+                                                        text_type.green().bold(),
+                                                    );
+                                                    println!(
+                                                        "Confidence Level: {}\n",
+                                                        confidence.to_string().green().bold(),
+                                                    );
+                                                }
+                                            });
+                                        }
+                                        true => {
+                                            println!(
+                                                "{}\n",
+                                                "key/object name can't be empty".red().bold()
+                                            )
+                                        }
+                                    }
+                                }
+                                true => {
+                                    println!("{}\n", "Bucket name can't be empty".red().bold())
+                                }
+                            }
+                        }
+                        "Start a face detection task\n" => {
+                            let get_buckets = s3_ops.get_buckets().await;
+                            let available_buckets =
+                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+
+                            let help_message =
+                                format!("S3 buckets are used to store face and videos.");
+                            let bucket_name = Text::new(
+                                "Select the bucket name where the face video is stored\n",
+                            )
+                            .with_placeholder(&available_buckets)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .with_help_message(&help_message)
+                            .prompt()
+                            .unwrap();
+                            match bucket_name.is_empty() {
+                                false => {
+                                    let get_objects =
+                                        s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                                    let available_objects = format!(
+                                        "Available keys in {bucket_name}\n{:#?}\n",
+                                        get_objects
+                                    );
+                                    let key_video_name = Text::new("Please input the key or path of the face video within the chosen bucket or copy it from the placeholder information\n")
+                                        .with_placeholder(&available_objects)
+                                        .with_formatter(&|str| format!(".....{str}.....\n"))
+                                        .with_help_message("Don't put quotation marks around the key when pasting")
+                                        .prompt()
+                                        .unwrap();
+                                    match key_video_name.is_empty() {
+                                        false => {
+                                            rekognition_ops
+                                                .start_face_detection_task(
+                                                    &bucket_name,
+                                                    &key_video_name,
+                                                )
+                                                .await;
+                                        }
+                                        true => {
+                                            println!(
+                                                "{}\n",
+                                                "key/object name can't be empty".red().bold()
+                                            )
+                                        }
+                                    }
+                                }
+                                true => {
+                                    println!("{}\n", "Bucket name can't be empty".red().bold())
+                                }
+                            }
+                        }
+                        "Get face detection results\n" => {
+                            let job_id = Text::new("To obtain the results of the face detection task, please enter the job ID\n")
+                                .with_placeholder("The job ID was generated when you initiated the start face detection task\n")
+                                .with_formatter(&|str| format!("......{str}......"))
+                                .prompt()
+                                .unwrap();
+
+                            match job_id.is_empty() {
+                                false => {
+                                    let face_info =
+                                        rekognition_ops.get_face_detection_results(&job_id).await;
+                                    let job_status = face_info.get_job_status();
+                                    let status_message = face_info.get_status_message();
+                                    let face_detail = face_info.get_face_detection();
+                                    if let (Some(job_status), Some(status_msg)) =
+                                        (job_status, status_message)
+                                    {
+                                        println!("Job Status is: {}\n", job_status.green().bold());
+                                        println!(
+                                            "Status Message is: {}\n",
+                                            status_msg.green().bold()
+                                        );
+                                    }
+                                    face_detail.into_iter().for_each(|face_detection| {
+                                        let timestamp = face_detection.timestamp();
+                                        let face = face_detection.face();
+                                        if let Some(face_details) = face {
+                                            let facedetails =
+                                                FaceDetails::build(face_details.to_owned());
+                                            let beard = facedetails.get_beard();
+                                            let smile = facedetails.get_smile();
+                                            let gender = facedetails.get_gender();
+                                            let age = facedetails.age_range();
+                                            if let (
+                                                (Some(gender), Some(gender_confidence)),
+                                                (Some(age), Some(age_confidence)),
+                                                (Some(smile), Some(smile_confidence)),
+                                                (Some(beard), Some(beard_confidence)),
+                                            ) = (gender, age, smile, beard)
+                                            {
+                                                println!(
+                                                    "Timestamp: {}\n",
+                                                    timestamp.to_string().blue().bold()
+                                                );
+                                                println!(
+                                                    "Gender: {} and Confidence Level: {}\n",
+                                                    gender.green().bold(),
+                                                    gender_confidence.to_string().green().bold()
+                                                );
+                                                println!(
+                                                    "Age: {} and Confidence Level: {}\n",
+                                                    age.to_string().green().bold(),
+                                                    age_confidence.to_string().green().bold()
+                                                );
+                                                println!(
+                                                    "Beard: {} and Confidence Level: {}\n",
+                                                    beard.to_string().green().bold(),
+                                                    beard_confidence.to_string().green().bold()
+                                                );
+                                                println!(
+                                                    "Smile: {} and Confidence Level: {}\n",
+                                                    smile.to_string().green().bold(),
+                                                    smile_confidence.to_string().green().bold()
+                                                );
+                                            }
+                                        }
+                                    });
+                                }
+                                true => {
+                                    println!("{}\n", "Job ID can't be empty".red().bold())
+                                }
+                            }
+                        }
+                        "Start a text detection task\n" => {
+                            let get_buckets = s3_ops.get_buckets().await;
+                            let available_buckets =
+                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+
+                            let help_message =
+                                format!("S3 buckets are used to store text and videos");
+                            let bucket_name = Text::new(
+                                "Select the bucket name where the text video is stored\n",
+                            )
+                            .with_placeholder(&available_buckets)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .with_help_message(&help_message)
+                            .prompt()
+                            .unwrap();
+                            match bucket_name.is_empty() {
+                                false => {
+                                    let get_objects =
+                                        s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                                    let available_objects = format!(
+                                        "Available keys in {bucket_name}\n{:#?}\n",
+                                        get_objects
+                                    );
+                                    let key_text_name = Text::new("Please input the key or path of the text video within the chosen bucket or copy it from the placeholder information\n")
+                                        .with_placeholder(&available_objects)
+                                        .with_formatter(&|str| format!(".....{str}.....\n"))
+                                        .with_help_message("Don't put quotation marks around the key when pasting")
+                                        .prompt()
+                                        .unwrap();
+                                    match key_text_name.is_empty() {
+                                        false => {
+                                            rekognition_ops
+                                                .start_text_detection_task(
+                                                    &bucket_name,
+                                                    &key_text_name,
+                                                )
+                                                .await;
+                                        }
+                                        true => {
+                                            println!(
+                                                "{}\n",
+                                                "key/object name can't be empty".red().bold()
+                                            )
+                                        }
+                                    }
+                                }
+                                true => {
+                                    println!("{}\n", "Bucket name can't be empty".red().bold())
+                                }
+                            }
+                        }
+                        "Get text detection results\n" => {
+                            let job_id = Text::new("To obtain the results of the text detection task, please enter the job ID\n")
+                            .with_placeholder("The job ID was generated when you initiated the start text detection task\n")
+                            .with_formatter(&|str| format!("......{str}......"))
+                            .prompt()
+                            .unwrap();
+                            match job_id.is_empty() {
+                                false => {
+                                    let text_results =
+                                        rekognition_ops.get_text_detection_results(&job_id).await;
+                                    let job_status = text_results.get_job_status();
+                                    let status_message = text_results.get_status_message();
+                                    let text_detection = text_results.get_text_detect_result();
+                                    if let (Some(job_status), Some(status_msg)) =
+                                        (job_status, status_message)
+                                    {
+                                        println!("Job Status is: {}\n", job_status.green().bold());
+                                        println!(
+                                            "Status Message is: {}\n",
+                                            status_msg.green().bold()
+                                        );
+                                    }
+                                    text_detection.into_iter().for_each(|text_outputs| {
+                                        let timestamp = text_outputs.timestamp();
+                                        let get_text = text_outputs.text_detection();
+                                        if let Some(text_detection) = get_text {
+                                            let textdetails =
+                                                TextDetect::build(text_detection.to_owned());
+
+                                            let texts = textdetails.get_detected_text();
+                                            let text_type = textdetails.get_text_type();
+                                            let confidence = textdetails.get_confidence();
+                                            println!(
+                                                "Timestamp: {}\n",
+                                                timestamp.to_string().green().bold()
+                                            );
+
+                                            if let (Some(text), Some(text_type), Some(confidence)) =
+                                                (texts, text_type, confidence)
+                                            {
+                                                println!(
+                                                    "Detected Text: {}\n",
+                                                    text.green().bold(),
+                                                );
+                                                println!(
+                                                    "Text Type: {}\n",
+                                                    text_type.green().bold(),
+                                                );
+                                                println!(
+                                                    "Confidence Level: {}\n",
+                                                    confidence.to_string().green().bold(),
+                                                );
+                                            }
+                                        }
+                                    });
+                                }
+                                true => println!("{}\n", "Job ID can't be empty".red().bold()),
+                            }
+                        }
+                        "Create Face Liveness task\n" => {
+                            let get_buckets = s3_ops.get_buckets().await;
+                            let available_buckets =
+                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+
+                            let help_message = format!("S3 buckets are used to store videos");
+                            let bucket_name = Text::new(
+                                "Select the bucket name where the face data will be stored when using a liveness session\n",
+                            )
+                            .with_placeholder(&available_buckets)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .with_help_message(&help_message)
+                            .prompt()
+                            .unwrap();
+                            match bucket_name.is_empty() {
+                                false => {
+                                    rekognition_ops.create_face_liveness(&bucket_name).await;
+                                }
+                                true => println!("{}\n", "Bucket name can't be empty".red().bold()),
+                            }
+                        }
+                        "Get face liveness results\n" => {
+                            let session_id= Text::new(
+                                "Please enter the session ID to retrieve the FaceLiveness results\n",
+                            )
+                            .with_placeholder("The session ID is generated when you call the CreateFaceLiveness REST API or\nis written to the current directory if you used the 'createfaceliveness' option")
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .with_help_message("")
+                            .prompt()
+                            .unwrap();
+                            match session_id.is_empty() {
+                                false => {
+                                    let results = rekognition_ops
+                                        .get_face_liveness_session_results(&session_id)
+                                        .await;
+                                    let status = results.get_liveness_status();
+                                    let confidence_level = results.get_confidence();
+                                    let reference_image_type = results.get_reference_image_type();
+
+                                    if let (Some(status), Some(confidence), Some(ref_type)) =
+                                        (status, confidence_level, reference_image_type.flatten())
+                                    {
+                                        println!(
+                                            "Status of FaceLivenessTask: {}\n",
+                                            status.green().bold()
+                                        );
+                                        println!(
+                                            "Confidence Level of Image: {}\n",
+                                            confidence.to_string().green().bold()
+                                        );
+                                        let s3_info = ref_type.get_s3_info();
+                                        let bbox = ref_type.get_bounding_box_info();
+                                        if let (
+                                            (Some(bucket_name), Some(bucket_key_name)),
+                                            (Some(width), Some(height), Some(left), Some(top)),
+                                        ) = (s3_info, bbox)
+                                        {
+                                            println!("The bucket name where the session is created and the key name where the reference images are stored are as follows\n");
+                                            println!(
+                                                "Bucket Name: {} and Bucket Key: {}\n",
+                                                bucket_name.green().bold(),
+                                                bucket_key_name.green().bold()
+                                            );
+                                            println!("Bounding box details\n");
+                                            println!(
+                                                "Width: {}\n",
+                                                width.to_string().green().bold()
+                                            );
+                                            println!(
+                                                "Height: {}\n",
+                                                height.to_string().green().bold()
+                                            );
+                                            println!("Left: {}\n", left.to_string().green().bold());
+                                            println!("Top: {}\n", top.to_string().green().bold());
+                                        }
+                                    }
+                                }
+                                true => {
+                                    println!("{}\n", "The Session ID can't be empty".red().bold())
+                                }
+                            }
+                        }
+                        "Go to the main menu\n" => continue 'main,
+                        _ => println!("Never Reach"),
+                    }
+                }
+            }
 
             "AWS Simple Notification Service(SNS) Operations\n" => {
                 let sns_operations = vec![
@@ -373,8 +885,8 @@ async fn main() {
                 ];
 
                 loop {
-                    let sns_choices = Select::new("", sns_operations.clone())
-                        .with_page_size(5)
+                    let sns_choices = Select::new("Select the option to execute the operation\n", sns_operations.clone())
+                        .with_page_size(6)
                         .with_help_message("These options are tailored for SMS services, rather than other notification services")
                         .prompt()
                         .unwrap();
@@ -382,6 +894,7 @@ async fn main() {
                         "Create Topic\n" => {
                             let topic_name = Text::new("Enter the topic name\n")
                                 .with_placeholder("This topic name also serves as the project name")
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
                                 .unwrap();
                             match topic_name.is_empty() {
@@ -396,11 +909,13 @@ async fn main() {
                         "Subscription Under Topic\n" => {
                             let topic_arn = Text::new("Enter the topic ARN to subscribe to\n")
                                 .with_placeholder("The topic ARN is generated and written to the current directory if you used the previous option; otherwise, go to the SNS topic page to obtain the ARN\n")
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
                                 .unwrap();
                             let some_possible_protocols ="Some possible Values\n'http' - delivery of JSON-encoded message via HTTP POST\n'email' - delivery of message via SMTP\n'sms' -delivery of message via SMS";
                             let protocol = Text::new("Please specify the protoco\n")
                                 .with_placeholder(some_possible_protocols)
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .with_help_message(
                                     "Click here https://tinyurl.com/2dkwfdpn to learn more",
                                 )
@@ -408,6 +923,7 @@ async fn main() {
                                 .unwrap();
                             let end_point = Text::new("Please specify the endpoint\n")
                             .with_placeholder("The endpoint depends on the protocol you selected in the previous option\n")
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .with_help_message("Click here https://tinyurl.com/2dkwfdpn to learn more")
                             .prompt()
                             .unwrap();
@@ -429,6 +945,7 @@ async fn main() {
                                 .with_placeholder(
                                     "Ensuring it includes the country code before the digits\n",
                                 )
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
                                 .unwrap();
                             match phone_number.is_empty() {
@@ -446,6 +963,7 @@ async fn main() {
                                                 "Please enter the OTP sent to your mobile",
                                             )
                                             .with_placeholder("It consists of 6 digits")
+                                            .with_formatter(&|str| format!(".....{str}.....\n"))
                                             .prompt()
                                             .unwrap();
                                             match otp.is_empty() {
@@ -484,15 +1002,18 @@ async fn main() {
                             let get_numbers = sns_ops.list_sms_sandbox_numbers().await;
                             let phone_number = Text::new("Please enter the phone number for verification or copy it from the placeholder information\n")
                             .with_placeholder(&get_numbers)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .with_help_message("Select the phone number with a pending status; otherwise, an error will occur")
                             .prompt()
                             .unwrap();
                             match phone_number.is_empty() {
                                 false => {
                                     sns_ops.create_sandbox_phone_number(&phone_number).await;
-                                    let info = format!("Please enter the OTP sent to: {phone_number}\n");
+                                    let info =
+                                        format!("Please enter the OTP sent to: {phone_number}\n");
                                     let otp = Text::new(&info)
                                         .with_placeholder("It consists of 6 digits")
+                                        .with_formatter(&|str| format!(".....{str}.....\n"))
                                         .prompt()
                                         .unwrap();
                                     match otp.is_empty() {
@@ -518,12 +1039,14 @@ async fn main() {
                         "Send Messages to Phone Numbers in a Topic\n" => {
                             let topic_arn = Text::new("Enter the topic ARN to send messages to\n")
                                 .with_placeholder("The ARN is generated when you create a topic\n")
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .with_help_message("If you used the 'create topic' option to create the topic, then the ARN is stored in the current directory")
                                 .prompt()
                                 .unwrap();
 
                             let message = Text::new("Enter the message you want to send\n")
-                            .with_placeholder("This data will be sent to all the subscribers in the given topic ARN")
+                            .with_placeholder("This data will be sent to all the subscribers in the given topic ARN\n")
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .prompt()
                             .unwrap();
                             match (topic_arn.is_empty(), message.is_empty()) {
@@ -547,7 +1070,6 @@ async fn main() {
     "Add an email to the list\n",
     "Default Values\n",
     "Email Verification\n",
-    "Configure from_address,list_name and template_name for\n one-time usage or customize them to better suit your specific use case\n",
     "Print the emails from the provided list\n",
     "Send a Simple Email to a Specific Recipient\n",
     "Send a Templated Email to a Specified Email Address\n",
@@ -557,27 +1079,29 @@ async fn main() {
     "Go to main menu\n",
     ];
                 loop {
-                    let email_choice =
-                        Select::new("Operations to perform\n", ses_operations.clone())
-                            .with_help_message(
-                                "Do not enclose it with quotation marks or add spaces",
-                            )
-                            .with_vim_mode(true)
-                            .with_page_size(5)
-                            .prompt()
-                            .unwrap();
+                    let email_choice = Select::new(
+                        "Select the option to execute the operation\n",
+                        ses_operations.clone(),
+                    )
+                    .with_help_message("Do not enclose it with quotation marks or add spaces")
+                    .with_vim_mode(true)
+                    .with_page_size(11)
+                    .prompt()
+                    .unwrap();
 
                     match email_choice {
             "Create a Contact List Name\n" => 
             
             {
                 let lst_name = Text::new("Enter the list name to add to the AWS Simple Email Service\n")
-                    .with_placeholder("The name should be unique")
+                    .with_placeholder("The name should be unique\n")
+                    .with_formatter(&|str| format!(".....{str}.....\n"))
                     .with_help_message("This is where the emails are stored")
                     .prompt()
                     .unwrap();
                 let description = Text::new("Small Description about the list name\n")
                     .with_placeholder("Eg: A list named 'Zone Email Contacts' is used to add the emails\nof people in a specific area but can be skipped\n")
+                    .with_formatter(&|str| format!(".....{str}.....\n"))
                     .prompt_skippable()
                     .unwrap()
                     .unwrap();
@@ -637,6 +1161,7 @@ async fn main() {
             "Email Verification\n" =>{
                 let email_to_verify = Text::new("Enter the email to check the identity\n")
                                     .with_placeholder("Only verified email can receive email\n")
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt()
                                     .unwrap();
                         match email_to_verify.is_empty(){
@@ -690,7 +1215,7 @@ async fn main() {
                            match print_emails{
                             true =>{
                                 let upto = Text::new("How many emails would you like to print?\n")
-                                                     .with_placeholder("Values should be non-zero; if no value is provided, it defaults to zero")
+                                                     .with_placeholder("Values should be non-zero; if no value is provided, it defaults to zero\n")
                                                      .with_formatter(&|str| format!(".....{str}....."))
                                                      .prompt_skippable()
                                                      .unwrap()
@@ -721,7 +1246,7 @@ async fn main() {
                         match print_emails{
                             true =>{
                                 let upto = Text::new("How many emails would you like to print?\n")
-                                                     .with_placeholder("Values should be non-zero; if no value is provided, it defaults to zero")
+                                                     .with_placeholder("Values should be non-zero; if no value is provided, it defaults to zero\n")
                                                     .with_formatter(&|str| format!(".....{str}....."))
                                                      .prompt_skippable()
                                                      .unwrap()
@@ -845,6 +1370,7 @@ async fn main() {
         let template_name = Text::new(
                 "Please enter the template name you want to use for the email\n",)
             .with_placeholder(&default_template_name)
+            .with_formatter(&|str| format!(".....{str}.....\n"))
             .with_help_message(
                 "The template name must exist, and the variables should be specified as key-value pairs according to the template\n",
             )
@@ -1043,10 +1569,13 @@ async fn main() {
                 ];
 
                 's3_ops: loop {
-                    let s3_choices = Select::new("Operations in S3 service", s3_operations.clone())
-                        .with_page_size(5)
-                        .prompt()
-                        .unwrap();
+                    let s3_choices = Select::new(
+                        "Select the option to execute the operation\n",
+                        s3_operations.clone(),
+                    )
+                    .with_page_size(10)
+                    .prompt()
+                    .unwrap();
                     match s3_choices {
                         "Create Bucket\n" => {
                             let get_bucket_lists = s3_ops.get_buckets().await;
@@ -1093,6 +1622,7 @@ async fn main() {
 
                             let bucket_name = Text::new("Please input the name of the bucket")
                                 .with_placeholder(&bucket_names)
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
                                 .unwrap();
 
@@ -1139,6 +1669,7 @@ async fn main() {
                                     let object_name =
                                         Text::new("Enter the object/key name to delete\n")
                                             .with_placeholder(&available_object_names)
+                                            .with_formatter(&|str| format!(".....{str}.....\n"))
                                             .prompt()
                                             .unwrap();
                                     s3_ops
@@ -1164,6 +1695,7 @@ async fn main() {
                             );
                             let bucket_name = Text::new("Enter the bucket name to delete")
                                 .with_placeholder(&bucket_names)
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .with_help_message("These are the buckets within your AWS services")
                                 .prompt()
                                 .unwrap();
@@ -1186,6 +1718,7 @@ async fn main() {
                                 .with_placeholder(
                                     "You can copy the path and ctrl+shift+v to paste it here",
                                 )
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
                                 .unwrap();
 
@@ -1196,12 +1729,14 @@ async fn main() {
                             );
                             let bucket_name = Text::new("Enter the bucket name\n")
                                 .with_placeholder(&available_bucket_name)
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .with_help_message("This is where we put the actual data")
                                 .prompt()
                                 .unwrap();
 
                             let key = Text::new("Enter the key or the identifier\n")
                                 .with_placeholder("This is what used to retreive the content later")
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
                                 .unwrap();
 
@@ -1225,6 +1760,7 @@ async fn main() {
 
                             let bucket_name = Text::new("Input the bucket name\n")
                                 .with_placeholder(&available_buckets)
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
                                 .unwrap();
                             match bucket_name.is_empty() {
@@ -1237,6 +1773,7 @@ async fn main() {
                                     );
                                     let object = Text::new("Input the object/key to download\n")
                                         .with_placeholder(&available_objects)
+                                        .with_formatter(&|str| format!(".....{str}.....\n"))
                                         .prompt()
                                         .unwrap();
                                     match object.is_empty() {
@@ -1265,6 +1802,7 @@ async fn main() {
                                 format!("Available buckets in your account: {:?}", get_bucket_name);
                             let bucket_name = Text::new("Enter the bucket name\n")
                                 .with_placeholder(&available_bucket_name)
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .with_help_message("This is where we put the actual data")
                                 .prompt()
                                 .unwrap();
@@ -1279,6 +1817,7 @@ async fn main() {
                                     );
                                     let object_name = Text::new("Enter the key or object for which you require a pre-signed URL\n")
                         .with_placeholder(&available_objects)
+                        .with_formatter(&|str| format!(".....{str}.....\n"))
                         .prompt()
                         .unwrap();
 
@@ -1286,6 +1825,7 @@ async fn main() {
                                         false => {
                                             let choosing_hour = Text::new("Enter the expiration time for the url in hour\n")
                                     .with_placeholder("Integer values should always be non-negative and should not contain any characters\n")
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt()
                                     .unwrap();
                                             match choosing_hour.is_empty() {
@@ -1342,12 +1882,14 @@ async fn main() {
                 loop {
                     let choices =
                         Select::new("Select the operations to execute\n", rds_choices.clone())
+                            .with_page_size(12)
                             .prompt()
                             .unwrap();
                     match choices {
                         "Create Db Instance\n" => {
                             let db_instance_identifier = Text::new("Enter the database instance identifier\n")
-                               .with_placeholder("The DB instance identifier is case-insensitive, but is stored as all lowercase (as in \"mydbinstance\").\nConstraints: 1 to 60 alphanumeric characters or hyphens. First character must be a letter. Can't contain two consecutive hyphens. Can't end with a hyphen")
+                               .with_placeholder("The DB instance identifier is case-insensitive, but is stored as all lowercase (as in \"mydbinstance\").\nConstraints: 1 to 60 alphanumeric characters or hyphens. First character must be a letter. Can't contain two consecutive hyphens. Can't end with a hyphen\n")
+                               .with_formatter(&|str| format!(".....{str}.....\n"))
                                .prompt()
                                .unwrap();
                             let engine =
@@ -1355,6 +1897,7 @@ async fn main() {
                                     .with_placeholder(
                                         "Some possible values are: 'mariadb', 'mysql', 'postgres'",
                                     )
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .with_help_message(
                                         "look here to know more http://tinyurl.com/4h8fcwf6",
                                     )
@@ -1364,34 +1907,40 @@ async fn main() {
                                 .with_placeholder(
                                     "Some possible values are: 'MySQL', 'MariaDB', 'PostgreSQL'",
                                 )
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .with_help_message(
                                     "look here to know more http://tinyurl.com/4mnhdpkm",
                                 )
                                 .prompt()
                                 .unwrap();
                             let storage_type= Text::new("Select the storage type for your database")  
-                     .with_placeholder("The storage type and the next database instance class should be a correct combination for successfully creating a database instance")   
+                     .with_placeholder("The storage type and the next database instance class should be a correct combination for successfully creating a database instance\n")
+                     .with_formatter(&|str| format!(".....{str}.....\n"))   
                      .with_help_message("Click here http://tinyurl.com/4h8fcwf6 to learn more") 
                      .prompt()
                      .unwrap();
                             let db_instance_class =  Text::new("Select instance class for your database\n")  
-            .with_placeholder("The instance class and the previous storage type should be a correct combination for successfully creating a database instance")   
+            .with_placeholder("The instance class and the previous storage type should be a correct combination for successfully creating a database instance\n")
+            .with_formatter(&|str| format!(".....{str}.....\n"))   
             .with_help_message("Click here http://tinyurl.com/29am8kup to learn more") 
             .prompt()
             .unwrap();
 
                             let allocated_storage = Text::new("Specify the storage capacity for your database in gigabytes, using numerical digits\n")  
-            .with_placeholder("The storage requirements depend on your specific use cases and the storage type you have previously selected")   
+            .with_placeholder("The storage requirements depend on your specific use cases and the storage type you have previously selected\n")
+            .with_formatter(&|str| format!(".....{str}.....\n"))   
             .with_help_message("Click here http://tinyurl.com/4h8fcwf6 to learn more") 
             .prompt()
             .unwrap();
 
                             let username = Text::new("Select the username for your database\n")  
-            .with_placeholder("The username and password options are required parameters for the database instance")  
+            .with_placeholder("The username and password options are required parameters for the database instance\n")
+            .with_formatter(&|str| format!(".....{str}.....\n"))  
             .prompt()
             .unwrap();
                             let password = Text::new("Select the password for your database\n")  
             .with_placeholder("Once you have created the database instance, you can obtain the database URL by selecting the 'Get Database URL' option")  
+            .with_formatter(&|str| format!(".....{str}.....\n"))
             .prompt()
             .unwrap();
 
@@ -1459,6 +2008,7 @@ async fn main() {
                             let db_instance_identifier =
                                 Text::new("Enter the database instance identifier\n")
                                     .with_placeholder(&default_db_instance)
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt_skippable()
                                     .unwrap()
                                     .unwrap();
@@ -1474,6 +2024,7 @@ async fn main() {
                                         true => {
                                             let password = Text::new("Enter the password\n")  
                               .with_placeholder("Please note that a password is necessary to generate the connection URL for the postgres database\n")
+                              .with_formatter(&|str| format!(".....{str}.....\n"))
                               .prompt()
                               .unwrap();
                                             let instance_info = rds_ops
@@ -1554,6 +2105,7 @@ async fn main() {
                                         true => {
                                             let password = Text::new("Enter the password\n")  
                                      .with_placeholder("Please note that a password is necessary to generate the connection URL for the postgres database\n")
+                                     .with_formatter(&|str| format!(".....{str}.....\n"))
                                      .prompt()
                                      .unwrap();
                                             let instance_info =
@@ -1627,6 +2179,7 @@ async fn main() {
                             let db_instance_identifier =
                                 Text::new("Enter the database instance identifier\n")
                                     .with_placeholder(&default_db_instance)
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt_skippable()
                                     .unwrap()
                                     .unwrap();
@@ -1657,7 +2210,8 @@ async fn main() {
                             let db_instance_identifier =
                                 Text::new("Enter the database instance identifier\n")
                                     .with_placeholder(&default_instance_id)
-                                    .with_help_message("The status of the DB instance should be \"stopped\"; otherwise, this operation will result in a panic (the Rust way of handling runtime exceptions).")
+                                    .with_help_message("The status of the DB instance should be \"stopped\"; otherwise, this operation will result in a panic (the Rust way of handling runtime exceptions)")
+                                     .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt_skippable()
                                     .unwrap()
                                     .unwrap();
@@ -1678,6 +2232,7 @@ async fn main() {
                             );
                             let db_instance_identifier = Text::new("Enter the database instance identifier for which you want to stop temporarily\n")  
                             .with_placeholder(&default_instance_id)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .with_help_message("The status of the DB instance should be \"available\"; otherwise, this operation will result in a panic (the Rust way of handling runtime exceptions).")
                             .prompt_skippable()
                             .unwrap()
@@ -1695,10 +2250,12 @@ async fn main() {
                             let db_instance_identifier =
                                 Text::new("Enter the DB instance ID you wish to modify\n")
                                     .with_placeholder("You can modify only master password\n")
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt()
                                     .unwrap();
                             let master_password = Text::new("Enter the new master password to replace the old one\n")
-                                    .with_placeholder("Please remember this password, as it is used to connect to various database instances\n",)
+                                    .with_placeholder("Please remember this password, as it is used to connect to various database instances\n")
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt()
                                     .unwrap();
                             let apply = Confirm::new("Would you like to apply the changes immediately, or would you prefer to have Amazon Web Services do it later?\n")
@@ -1729,6 +2286,7 @@ async fn main() {
                             );
                             let db_instance_identifier = Text::new("Enter the database instance identifier you wish to delete permanently\n")  
                             .with_placeholder(&default_instance_id)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .prompt_skippable()
                             .unwrap()
                             .unwrap();
@@ -1749,6 +2307,7 @@ async fn main() {
                             let db_instance_identifier =
                                 Text::new("Enter the database instance identifier\n")
                                     .with_placeholder(&default_db_instance)
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt_skippable()
                                     .unwrap()
                                     .unwrap();
@@ -1769,6 +2328,7 @@ async fn main() {
                             );
                             let db_cluster_identifier = Text::new("Enter the database cluster identifier, which is different from the database instance identifier\n")  
                              .with_placeholder(&default_cluster_id)
+                             .with_formatter(&|str| format!(".....{str}.....\n"))
                               .prompt_skippable()
                                .unwrap()
                                .unwrap();
@@ -1824,6 +2384,7 @@ async fn main() {
                             );
                             let db_cluster_identifier = Text::new("Enter the database cluster identifier, which is different from the database instance identifier\n")  
                              .with_placeholder(&default_cluster_id)
+                             .with_formatter(&|str| format!(".....{str}.....\n"))
                              .prompt_skippable()
                              .unwrap()
                              .unwrap();
@@ -1873,6 +2434,7 @@ async fn main() {
                 loop {
                     let choices =
                         Select::new("Select the operations to execute\n", memdb_choices.clone())
+                            .with_page_size(12)
                             .prompt()
                             .unwrap();
 
@@ -1882,6 +2444,7 @@ async fn main() {
                                 "Please enter the name for the new ACL you want to create\n",
                             )
                             .with_placeholder("The name must be uniquely identifiable")
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .prompt()
                             .unwrap();
 
@@ -1898,6 +2461,7 @@ async fn main() {
                         "Create MemDb Cluster\n" => {
                             let cluster_name = Text::new("Enter the cluster name\n")
                                 .with_placeholder("The name must be uniquely identifiable")
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
                                 .unwrap();
                             let possible_values = vec![
@@ -1911,6 +2475,7 @@ async fn main() {
                             let node_type =
                                 Text::new("Select the node type for your database system\n")
                                     .with_placeholder(&possible_values)
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .with_help_message(
                                         "look here to know more https://tinyurl.com/axy83wff",
                                     )
@@ -1919,6 +2484,7 @@ async fn main() {
 
                             let acl_name = Text::new("Specify the name of the Access Control List (ACL) to associate with the cluster\n")
                         .with_placeholder("Acl name is created through the aws console of memdb.")
+                        .with_formatter(&|str| format!(".....{str}.....\n"))
                         .with_help_message("look here to know more https://tinyurl.com/yn3n4wya")
                         .prompt()
                         .unwrap();
@@ -1939,11 +2505,13 @@ async fn main() {
                         "Create MemDb User\n" => {
                             let user_name = Text::new("Please provide a name for this MemDB user\n")
                         .with_placeholder("This name will also serve as the username for the database within a MemDB cluster\n")
+                        .with_formatter(&|str| format!(".....{str}.....\n"))
                         .prompt()
                         .unwrap();
                             let possible_access_string_values = "The formats\n 'on' -The user is an active user\n '~*' - Access is given to all available keys\n '+@all' - Access is given to all available commands\n";
                             let access_string = Text::new("Please provide the access string or permission values for this user\n")
                                        .with_placeholder(possible_access_string_values)
+                                       .with_formatter(&|str| format!(".....{str}.....\n"))
                                        .with_help_message("Look here to know more https://tinyurl.com/2p9mnm64")
                                        .prompt()
                                        .unwrap();
@@ -1951,13 +2519,15 @@ async fn main() {
                                 "    iam or Iam\n    Password or password\n";
                             let auth_type = Text::new("Specify the authenticated user's type\n")
                                 .with_placeholder(possible_authenticated_types)
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .with_help_message(
                                     "Look here to know more https://tinyurl.com/3zaztx97",
                                 )
                                 .prompt()
                                 .unwrap();
                             let passwords = Text::new("Please enter the passwords for the memdb user\n")
-                                     .with_placeholder("Please remember this password; it's used for authenticating the database in a 'memdb' cluster")
+                                     .with_placeholder("Please remember this password; it's used for authenticating the database in a 'memdb' cluster\n")
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                      .with_help_message("Please ensure that your password contains a minimum of 16 characters")
                                      .prompt()
                                      .unwrap();
@@ -2012,6 +2582,7 @@ async fn main() {
                                 "Please enter the ACL name for the information you seek\n",
                             )
                             .with_placeholder(&available_acl_names)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .prompt()
                             .unwrap();
                             match acl_name.is_empty() {
@@ -2053,7 +2624,8 @@ async fn main() {
 
                         "Describe MemDb Cluster\n" => {
                             let cluster_name = Text::new("Enter the cluster name for which you want to retrieve information\n")
-                        .with_placeholder("The cluster anem is generated during the MemDB cluster creation process")
+                        .with_placeholder("The cluster anem is generated during the MemDB cluster creation process\n")
+                        .with_formatter(&|str| format!(".....{str}.....\n"))
                         .prompt()
                         .unwrap();
 
@@ -2077,7 +2649,8 @@ async fn main() {
                         }
                         "Describe MemDb User\n" => {
                             let username = Text::new("Enter the MemDB user name for which you want to retrieve information\n")
-             .with_placeholder("The username is generated during the MemDB user creation process")
+             .with_placeholder("The username is generated during the MemDB user creation process\n")
+             .with_formatter(&|str| format!(".....{str}.....\n"))
             .prompt()
             .unwrap();
                             match username.is_empty() {
@@ -2099,7 +2672,8 @@ async fn main() {
                             let cluster_name = Text::new(
                                 "Enter the cluster name for which you want to get snapshots\n",
                             )
-                            .with_placeholder("The cluster name is generated during the MemDB cluster creation process.")
+                            .with_placeholder("The cluster name is generated during the MemDB cluster creation process\n")
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .prompt()
                             .unwrap();
 
@@ -2122,7 +2696,8 @@ async fn main() {
 
                         "Retrieve the database URL for connection\n" => {
                             let cluster_name = Text::new("Enter the cluster name for which you need the connection URL\n")
-                        .with_placeholder("The cluster name is the name assigned to the cluster when it was initially created")
+                        .with_placeholder("The cluster name is the name assigned to the cluster when it was initially created\n")
+                        .with_formatter(&|str| format!(".....{str}.....\n"))
                         .prompt()
                         .unwrap();
 
@@ -2158,6 +2733,7 @@ async fn main() {
                                 "Please provide the name of the ACL you wish to delete\n",
                             )
                             .with_placeholder(&available_acl_names)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
                             .prompt()
                             .unwrap();
                             match acl_name.is_empty() {
@@ -2197,7 +2773,8 @@ async fn main() {
 
                         "Delete MemDb User\n" => {
                             let username = Text::new("Enter the MemDB user name to delete\n") 
-                          .with_placeholder("The username is generated during the MemDB user creation process")
+                          .with_placeholder("The username is generated during the MemDB user creation process\n")
+                          .with_formatter(&|str| format!(".....{str}.....\n"))
                            .prompt()
                            .unwrap();
                             match username.is_empty() {
@@ -2208,12 +2785,14 @@ async fn main() {
                         "Delete Cluster\n" => {
                             let cluster_name =
                                 Text::new("Enter the cluster name for which you want to delete\n")
-                                     .with_placeholder("The cluster name is generated during the MemDB cluster creation process.")
+                                     .with_placeholder("The cluster name is generated during the MemDB cluster creation process\n")
+                                     .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt()
                                     .unwrap();
                             let final_snapshot_name =
                                 Text::new("Create snapsho\n")
-                                    .with_placeholder("You can create a final snapshot of your cluster before it’s deleted so you can restore it later")
+                                    .with_placeholder("You can create a final snapshot of your cluster before it’s deleted so you can restore it later\n")
+                                    .with_formatter(&|str| format!(".....{str}.....\n"))
                                     .prompt()
                                     .unwrap();
 
@@ -2244,13 +2823,12 @@ async fn main() {
 }
 fn global_render_config() -> RenderConfig {
     let mut config = RenderConfig::default()
-        .with_prompt_prefix(Styled::new(">>> ").with_fg(inquire::ui::Color::DarkGreen))
+        .with_prompt_prefix(Styled::new("⚙️").with_fg(inquire::ui::Color::DarkBlue))
         .with_text_input(StyleSheet::new().with_fg(inquire::ui::Color::LightGreen))
-        .with_highlighted_option_prefix(Styled::new("👉").with_fg(inquire::ui::Color::DarkRed))
+        .with_highlighted_option_prefix(Styled::new("👉"))
         .with_help_message(StyleSheet::new().with_fg(inquire::ui::Color::DarkYellow));
-    config.error_message = config.error_message;
     config.answer = StyleSheet::new()
-        .with_attr(Attributes::ITALIC)
+        .with_attr(Attributes::BOLD)
         .with_fg(inquire::ui::Color::DarkGreen);
     config
 }
