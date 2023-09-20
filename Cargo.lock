@@ -434,6 +434,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-transcribe"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c2cbf354be66085a8a7f69836aeaef0dbcef860417cf1d5def8810defc41be0"
+dependencies = [
+ "aws-credential-types",
+ "aws-http",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-client",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "http",
+ "regex",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sigv4"
 version = "0.56.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -659,7 +683,7 @@ dependencies = [
 [[package]]
 name = "aws_apis"
 version = "0.1.0"
-source = "git+https://github.com/Sanjuvi/aws_apis.git#8c1029a8d14a9407377672561c40fb9fb8993c35"
+source = "git+https://github.com/Sanjuvi/aws_apis.git#3dc202e03c3052f14761c63a179cdeadd7c100bf"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -672,6 +696,7 @@ dependencies = [
  "aws-sdk-s3",
  "aws-sdk-sesv2",
  "aws-sdk-sns",
+ "aws-sdk-transcribe",
  "aws-types",
  "chrono",
  "colored",

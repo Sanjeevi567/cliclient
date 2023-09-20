@@ -6,7 +6,7 @@ use inquire::{
 };
 
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Read, Write};
 
 //Interneal APIs
 
@@ -56,7 +56,7 @@ async fn main() {
             "Verify the Credential\n" => {
                 let choices = Confirm::new("Load the credentials from the configuration file or from environment variables\n")
                           .with_placeholder("Use 'Yes' to load from the environment and 'No' to load from environment variables\n")
-                          .with_help_message("message")
+                          .with_help_message("Without proper credentials, no operations can be executed successfully")
                           .prompt()
                           .unwrap();
 
@@ -121,10 +121,11 @@ async fn main() {
 
             "Amazon Polly Operations\n" => {
                 let polly_operations = vec![
-                    "Start Synthesizing Speech Task\n",
-                    "List Speech Synthesis Tasks\n",
-                    "Retrieve voice information from Amazon Polly\n",
-                    "Go To Main Menu\n",
+                    "Start the Speech Synthesis Task\n",
+                    "Get the Speech Synthesis Results\n",
+                    "List all Speech Synthesis Tasks\n",
+                    "Obtain voice information from Amazon Polly\n",
+                    "Return to the Main Menu\n",
                 ];
 
                 loop {
@@ -134,11 +135,11 @@ async fn main() {
                     )
                     .with_help_message("Do not enclose it with quotation marks or add spaces")
                     .with_vim_mode(true)
-                    .with_page_size(4)
+                    .with_page_size(5)
                     .prompt()
                     .unwrap();
                     match polly_choices {
-                        "Start Synthesizing Speech Task\n" => {
+                        "Start the Speech Synthesis Task\n" => {
                             let possible_engines =
                                 "Possible Engine Values are: 'standard'\n'neural'\n";
                             let engine_name =
@@ -192,7 +193,7 @@ async fn main() {
                          .with_help_message("Click here https://tinyurl.com/zyuwuvhp to learn more")
                          .prompt()
                          .unwrap();
-                                    let text_to_generate_speech = Text::new("Please upload the text file for which you'd like to generate audio\n")
+                                    let text_to_generate_speech_path = Text::new("Please specify the path of the text file for which you would like audio generation\n")
                          .with_placeholder("The format of the text content is determined by the preceding selections\n")
                          .with_help_message("Click here https://tinyurl.com/ynjmpur3 to Learn more")
                          .with_formatter(&|str| format!(".....{str}.....\n"))
@@ -218,13 +219,26 @@ async fn main() {
                                         voice_id.is_empty(),
                                         language_code.is_empty(),
                                         text_type.is_empty(),
-                                        text_to_generate_speech.is_empty(),
+                                        text_to_generate_speech_path.is_empty(),
                                         audio_output_format.is_empty(),
                                         bucket_name.is_empty(),
                                     ) {
                                         (false, false, false, false, false, false) => {
-                                            let synthesise_info = polly_ops
-                                                .start_synthesise_task(
+                                            let mut speech_text_data = OpenOptions::new()
+                                                .create(true)
+                                                .read(true)
+                                                .write(true)
+                                                .open(&text_to_generate_speech_path)
+                                                .expect(
+                                                    "Error opening the file path you specified\n",
+                                                );
+                                            let mut text_to_generate_speech = String::new();
+                                            speech_text_data
+                                                .read_to_string(&mut text_to_generate_speech)
+                                                .expect("Error while reading data\n");
+
+                                            polly_ops
+                                                .start_speech_synthesise_task(
                                                     &engine_name,
                                                     &voice_id,
                                                     &language_code,
@@ -234,64 +248,6 @@ async fn main() {
                                                     &bucket_name,
                                                 )
                                                 .await;
-                                            let status = synthesise_info.get_task_status();
-                                            let engine = synthesise_info.get_engine();
-                                            let output_uri = synthesise_info.get_output_uri();
-                                            let output_format = synthesise_info.get_output_format();
-                                            let text_type = synthesise_info.get_text_type();
-                                            let voice_id = synthesise_info.get_voice_id();
-                                            let language_code = synthesise_info.get_language_code();
-
-                                            if let (
-                                                Some(status),
-                                                Some(engine),
-                                                Some(uri),
-                                                Some(format),
-                                                Some(text),
-                                                Some(voice),
-                                                Some(code),
-                                            ) = (
-                                                status,
-                                                engine,
-                                                output_uri,
-                                                output_format,
-                                                text_type,
-                                                voice_id,
-                                                language_code,
-                                            ) {
-                                                let colored_status = status.green().bold();
-                                                let colored_engine = engine.green().bold();
-                                                let colored_uri = uri.green().bold();
-                                                let colored_format = format.green().bold();
-                                                let colored_type = text.green().bold();
-                                                let colored_voiceid = voice.green().bold();
-                                                let colored_code = code.green().bold();
-                                                println!("This information is obtained from the AWS REST API\n");
-                                                println!("Task Status: {colored_status}\n");
-                                                println!("Engine Name: {colored_engine}\n");
-                                                println!("Output Format of the synthesized audio: {colored_format}\n");
-                                                println!("Voice ID of the synthesized audio: {colored_voiceid}\n");
-                                                println!("Text type of synthesized audio: {colored_type}\n");
-                                                println!("Language Code for the synthesized audio: {colored_code}\n");
-                                                println!("The URL for the audio will remain valid for up to 72 hours, which is equivalent to 3 days\n");
-                                                println!("URL for the synthesized audio: {colored_uri}\n");
-                                                let mut file = OpenOptions::new()
-                                                    .create(true)
-                                                    .read(true)
-                                                    .write(true)
-                                                    .open("audio_uri.txt")
-                                                    .unwrap();
-                                                let uri_data = format!("URL for the synthesized audio: {colored_uri}\n");
-
-                                                file.write_all(uri_data.as_bytes())
-                                                    .expect("Error while writing...");
-                                                println!(
-                                                    "{}\n",
-                                                    "URL is writen to current directory"
-                                                        .green()
-                                                        .bold()
-                                                );
-                                            }
                                         }
                                         _ => println!(
                                             "{}\n",
@@ -304,12 +260,92 @@ async fn main() {
                                 }
                             }
                         }
+                        "Get the Speech Synthesis Results\n" => {
+                            let task_id = Text::new("To obtain speech results, enter the task ID\n")
+                                .with_placeholder("Task ID was generated when calling the StartSpeechSynthesisTask REST API or\nis available in the current directory if you chose the 'Start the speech synthesis task' option\n")
+                                .with_formatter(&|str| format!(".....{str}....."))
+                                .prompt()
+                                .unwrap();
+                            match task_id.is_empty() {
+                                false => {
+                                    let info =
+                                        polly_ops.get_speech_synthesis_result(&task_id).await;
+                                    if let Some(synthesise_info) = info {
+                                        let status = synthesise_info.get_task_status();
+                                        let engine = synthesise_info.get_engine();
+                                        let output_uri = synthesise_info.get_output_uri();
+                                        let output_format = synthesise_info.get_output_format();
+                                        let text_type = synthesise_info.get_text_type();
+                                        let voice_id = synthesise_info.get_voice_id();
+                                        let language_code = synthesise_info.get_language_code();
 
-                        "List Speech Synthesis Tasks\n" => {
+                                        if let (
+                                            Some(status),
+                                            Some(engine),
+                                            Some(uri),
+                                            Some(format),
+                                            Some(text),
+                                            Some(voice),
+                                            Some(code),
+                                        ) = (
+                                            status,
+                                            engine,
+                                            output_uri,
+                                            output_format,
+                                            text_type,
+                                            voice_id,
+                                            language_code,
+                                        ) {
+                                            let colored_status = status.green().bold();
+                                            let colored_engine = engine.green().bold();
+                                            let colored_uri = uri.green().bold();
+                                            let colored_format = format.green().bold();
+                                            let colored_type = text.green().bold();
+                                            let colored_voiceid = voice.green().bold();
+                                            let colored_code = code.green().bold();
+                                            println!(
+                                            "This information is obtained from the AWS REST API\n"
+                                        );
+                                            println!("Task Status: {colored_status}\n");
+                                            println!("Engine Name: {colored_engine}\n");
+                                            println!("Output Format of the synthesized audio: {colored_format}\n");
+                                            println!("Voice ID of the synthesized audio: {colored_voiceid}\n");
+                                            println!(
+                                                "Text type of synthesized audio: {colored_type}\n"
+                                            );
+                                            println!("Language Code for the synthesized audio: {colored_code}\n");
+                                            println!("The URL for the audio will remain valid for up to 72 hours, which is equivalent to 3 days\n");
+                                            println!(
+                                                "URL for the synthesized audio: {colored_uri}\n"
+                                            );
+                                            let mut file = OpenOptions::new()
+                                                .create(true)
+                                                .read(true)
+                                                .write(true)
+                                                .open("audio_uri.txt")
+                                                .unwrap();
+                                            let uri_data = format!(
+                                                "URL for the synthesized audio: {colored_uri}\n"
+                                            );
+
+                                            file.write_all(uri_data.as_bytes())
+                                                .expect("Error while writing...");
+                                            println!(
+                                                "{}\n",
+                                                "URL is writen to current directory".green().bold()
+                                            );
+                                        }
+                                    }
+                                }
+                                true => println!("{}\n", "Task ID can't be empty".red().bold()),
+                            }
+                        }
+
+                        "List all Speech Synthesis Tasks\n" => {
                             polly_ops.list_synthesise_speech().await;
                         }
 
-                        "Retrieve voice information from Amazon Polly\n" => {
+                        "Obtain voice information from Amazon Polly\n" => {
                             let info = polly_ops.describe_voices().await;
                             info.iter()
                 .take(3)
@@ -368,7 +404,7 @@ async fn main() {
                             );
                         }
 
-                        "Go To Main Menu\n" => continue 'main,
+                        "Return to the Main Menu\n" => continue 'main,
 
                         _ => println!("Never Reach"),
                     }
@@ -384,7 +420,7 @@ async fn main() {
                     "Get text detection results\n",
                     "Create Face Liveness task\n",
                     "Get face liveness results\n",
-                    "Go to the main menu\n",
+                    "Return to the Main Menu\n",
                 ];
                 loop {
                     let rekog_choices = Select::new(
@@ -868,7 +904,7 @@ async fn main() {
                                 }
                             }
                         }
-                        "Go to the main menu\n" => continue 'main,
+                        "Return to the Main Menu\n" => continue 'main,
                         _ => println!("Never Reach"),
                     }
                 }
@@ -881,7 +917,7 @@ async fn main() {
                     "Add Phone Number\n",
                     "Verify the pending status of the phone number\n",
                     "Send Messages to Phone Numbers in a Topic\n",
-                    "Go To Main Menu\n",
+                    "Return to the Main Menu\n",
                 ];
 
                 loop {
@@ -1057,7 +1093,7 @@ async fn main() {
                             }
                         }
 
-                        "Go To Main Menu\n" => continue 'main,
+                        "Return to the Main Menu\n" => continue 'main,
 
                         _ => println!("Never Reach\n"),
                     }
@@ -1067,16 +1103,19 @@ async fn main() {
             "AWS Simple Email Service(SES) Operations\n" => {
                 let ses_operations = vec![
     "Create a Contact List Name\n",
+    "Delete Contact List Name\n",
     "Add an email to the list\n",
     "Default Values\n",
     "Email Verification\n",
     "Print the emails from the provided list\n",
     "Send a Simple Email to a Specific Recipient\n",
+    "Create Email Template\n",
+    "Delete Template\n",
     "Send a Templated Email to a Specified Email Address\n",
     "Send a simple email with the same body and subject to all the email addresses in the list\n",
     "Send templated Emails\n",
     "Common Errors\n",
-    "Go to main menu\n",
+    "Return to the Main Menu\n",
     ];
                 loop {
                     let email_choice = Select::new(
@@ -1090,6 +1129,62 @@ async fn main() {
                     .unwrap();
 
                     match email_choice {
+
+                        "Create Email Template\n" => {
+                            let get_available_template_names = ses_ops.list_email_templates().await;
+                            let placeholder_info = format!("Please note that these template names are already available for your use:\n{:#?}",get_available_template_names);
+                            let template_name = Text::new(
+                                "Please provide the new template name for this template\n",)
+                            .with_placeholder(&placeholder_info)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .prompt_skippable()
+                            .unwrap()
+                            .unwrap();
+                            
+                            let subject =Text::new("Please enter the subject with or without template variables\n")
+                                .with_placeholder("For example: 'Greetings, {{name}}' or simply 'Greetings'\n")
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
+                                .prompt_skippable()
+                                .unwrap()
+                                .unwrap();
+                            let template_path = Text::new("Specify the path for the template you have created in '.json' formatt\n")
+                                      .with_formatter(&|str| format!(".....{str}.....\n"))
+                                      .with_placeholder("The HTML body can include your content and template variables for personalization\n")
+                                      .with_help_message("Example template is available at this location: https://tinyurl.com/4na92rph")
+                                      .prompt()
+                                      .unwrap();
+                            match (template_name.is_empty(),subject.is_empty(),template_path.is_empty()){
+                                (false,false,false) => {
+                                    let mut reading_template_data = OpenOptions::new()
+                                                                 .read(true)
+                                                                 .write(true)
+                                                                 .open(&template_path)
+                                                                 .expect("Error opening the file path you specified");
+                        let mut template_data = String::new();
+                         reading_template_data.read_to_string(&mut template_data).expect("Error while reading data\n");
+                         ses_ops.create_email_template(&template_name,&template_data,&subject).await;
+                                }
+                                _ => println!("{}\n","No Fields can be empty".red().bold())
+                            }
+                        }
+                        "Delete Template\n" => {
+                            let get_available_template_names = ses_ops.list_email_templates().await;
+                            let placeholder_info = format!("Available Templates \n{:#?}",get_available_template_names);
+                            let template_name = Text::new(
+                                "Please provide the template name for deletion\n",)
+                            .with_placeholder(&placeholder_info)
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .prompt_skippable()
+                            .unwrap()
+                            .unwrap();
+                           match template_name.is_empty(){
+                            false => {
+                                ses_ops.delete_template(&template_name).await;
+                            }
+                            true => println!("{}\n","Template Name can't be empty".red().bold())
+                           }
+                        }
+                    
             "Create a Contact List Name\n" => 
             
             {
@@ -1113,6 +1208,20 @@ async fn main() {
                         ses_ops.create_contact_list_name(&lst_name, None).await;
                     },
                     _ => println!("{}\n","Contact Name Can't be empty..try again".red().bold()),
+                }
+            }
+            "Delete Contact List Name\n" => {
+                let get_available_contact_lists = ses_ops.list_contact_lists().await;
+                let contact_list_names= format!("Available Contact List Names:\n{:#?}\n",get_available_contact_lists);
+                let lst_name = Text::new("Enter the Contact List name to delete from AWS Simple Email Service\n")
+                    .with_placeholder(&contact_list_names)
+                    .with_formatter(&|str| format!(".....{str}.....\n"))
+                    .with_help_message("This is where the emails are stored")
+                    .prompt()
+                    .unwrap();
+                match lst_name.is_empty(){
+                    false => {}
+                    true => println!("{}\n","Contact List Name can't be empty".red().bold())
                 }
             }
 
@@ -1384,14 +1493,24 @@ async fn main() {
                 .prompt_skippable()
                 .unwrap()
                 .unwrap();
-            let template_data = Text::new("Enter the template data\n")
+            let placeholder_info = format!("The template variables should reflect the '{}' template",template_name);
+            let template_path = Text::new("You can provide the path to the template data in JSON format\n")
                       .with_formatter(&|str| format!(".....{str}.....\n"))
+                      .with_placeholder(&placeholder_info)
                       .prompt()
                       .unwrap();
                  
-                match (email.is_empty(), template_name.is_empty(),from_address.is_empty()) {
+                match (email.is_empty(), template_name.is_empty(),from_address.is_empty(),template_path.is_empty()) {
                     //If both email and template is specified we can use those
-                    (false, false,false) => {
+                    (false, false,false,false) => {
+                        let mut reading_template_data = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(&template_path)
+                        .expect("Error opening the file path you specified");
+                        let mut template_data = String::new();
+                         reading_template_data.read_to_string(&mut template_data).expect("Error while reading data\n");
+
                         let email_content=TemplateMail::builder(&template_name, &template_data)
                         .build();
                          ses_ops
@@ -1407,7 +1526,15 @@ async fn main() {
                     }
                     //If template name is skipped then default template name is used
                     //which might results in error if no template name is None or not exist
-                    (false,false,true) => {
+                    (false,false,true,false) => {
+                        let mut reading_template_data = OpenOptions::new()
+                        .create(true)
+                        .read(true)
+                        .write(true)
+                        .open(&template_path)
+                        .expect("Error opening the file path you specified");
+                        let mut template_data = String::new();
+                         reading_template_data.read_to_string(&mut template_data).expect("Error while reading data\n");
                         let email_content=TemplateMail::builder(&template_name, &template_data)
                         .build();
                             ses_ops
@@ -1422,8 +1549,15 @@ async fn main() {
                             .unwrap();
                     }
                 
-                    (false,true,true) =>{
-                        println!("Template data is:\n{}",template_data);
+                    (false,true,true,false) =>{
+                        let mut reading_template_data = OpenOptions::new()
+                        .create(true)
+                        .read(true)
+                        .write(true)
+                        .open(&template_path)
+                        .expect("Error opening the file path you specified");
+                        let mut template_data = String::new();
+                         reading_template_data.read_to_string(&mut template_data).expect("Error while reading data\n");
                         let email_content=TemplateMail::builder(&get_template_name, &template_data)
                         .build();
                             ses_ops
@@ -1436,7 +1570,15 @@ async fn main() {
                                 println!("The template email is send to: {}\n",colored_email)})
                             .unwrap();
                     }
-                    (false,true,false) =>{
+                    (false,true,false,false) =>{
+                        let mut reading_template_data = OpenOptions::new()
+                        .create(true)
+                        .read(true)
+                        .write(true)
+                        .open(&template_path)
+                        .expect("Error opening the file path you specified");
+                        let mut template_data = String::new();
+                         reading_template_data.read_to_string(&mut template_data).expect("Error while reading data\n");
                         let email_content=TemplateMail::builder(&get_template_name, &template_data)
                         .build();
                             ses_ops
@@ -1535,19 +1677,8 @@ async fn main() {
             let possible_errors = include_str!("./possible_errors.txt").blue().italic().bold();
              println!("{}\n",possible_errors);
 
-            let decision = Confirm::new("Go to main or exist")
-               .with_placeholder("Yes to main menu , No to Quit")
-              .prompt()
-              .unwrap();
-            if decision{
-                continue 'main;
-            }
-            else{
-                break 'main;
-            }
-
          }
-         "Go to main menu\n" => continue 'main,
+         "Return to the Main Menu\n" => continue 'main,
 
             _ => {}
         }
@@ -1565,7 +1696,7 @@ async fn main() {
                     "Get Bucket Lists\n",
                     "Delete object from a bucket\n",
                     "Delete Bucket\n",
-                    "Go to main\n",
+                    "Return to the Main Menu\n",
                 ];
 
                 's3_ops: loop {
@@ -1857,7 +1988,7 @@ async fn main() {
                                 }
                             }
                         }
-                        "Go to main\n" => break 's3_ops,
+                        "Return to the Main Menu\n" => break 's3_ops,
                         _ => {}
                     }
                 }
@@ -1876,7 +2007,7 @@ async fn main() {
                     "Delete Db Instance\n",
                     "Describe Db Cluster\n",
                     "Delete Db Cluster\n",
-                    "Go to main menu\n",
+                    "Return to the Main Menu\n",
                 ];
 
                 loop {
@@ -2408,7 +2539,7 @@ async fn main() {
                                 println!("Db Instance Id: {}\n", colored_instance_id);
                             });
                         }
-                        "Go to main menu\n" => continue 'main,
+                        "Return to the Main Menu\n" => continue 'main,
 
                         _ => println!("Never reach"),
                     }
@@ -2428,7 +2559,7 @@ async fn main() {
                     "Delete Access Control List (ACL)\n",
                     "Delete MemDb User\n",
                     "Delete Cluster\n",
-                    "Go To Main Menu\n",
+                    "Return to the Main Menu\n",
                 ];
 
                 loop {
@@ -2805,7 +2936,7 @@ async fn main() {
                                 _ => println!("{}\n", "Fields cannot be left empty".red().bold()),
                             }
                         }
-                        "Go To Main Menu\n" => continue 'main,
+                        "Return to the Main Menu\n" => continue 'main,
                         _ => println!("Never reach"),
                     }
                 }
