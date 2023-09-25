@@ -12,7 +12,7 @@ use std::io::{Read, Write};
 
 use aws_apis::{
     load_credential_from_env, CredentInitialize, MemDbOps, PollyOps, RdsOps, RekognitionOps, S3Ops,
-    SesOps, SimpleMail, Simple_, SnsOps, TemplateMail, Template_,
+    SesOps, SimpleMail, Simple_, SnsOps, TemplateMail, Template_, TranscribeOps,
 };
 use reqwest::get;
 
@@ -27,6 +27,7 @@ async fn main() {
         "Print Credentials Information\n",
         "Amazon Polly Operations\n",
         "Amazon Rekognition Operations\n",
+        "Amazon Transcribe\n",
         "AWS Simple Notification Service(SNS) Operations\n",
         "AWS Simple Email Service(SES) Operations\n",
         "S3 Bucket Operations\n",
@@ -44,6 +45,7 @@ async fn main() {
     let mut polly_ops: PollyOps = PollyOps::build(credential.build());
     let mut sns_ops: SnsOps = SnsOps::build(credential.build());
     let mut rekognition_ops: RekognitionOps = RekognitionOps::build(credential.build());
+    let mut transcribe_ops = TranscribeOps::build(credential.build());
 
     'main: loop {
         let choice = Select::new("Select the option to execute the operation\n", operations.clone())
@@ -75,7 +77,8 @@ async fn main() {
                         memdb_ops = MemDbOps::build(config.clone());
                         polly_ops = PollyOps::build(config.clone());
                         sns_ops = SnsOps::build(config.clone());
-                        rekognition_ops = RekognitionOps::build(config);
+                        rekognition_ops = RekognitionOps::build(config.clone());
+                        transcribe_ops = TranscribeOps::build(config);
                         println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".blue().bold());
                     }
                     false => {
@@ -94,7 +97,8 @@ async fn main() {
                         memdb_ops = MemDbOps::build(config.clone());
                         polly_ops = PollyOps::build(config.clone());
                         sns_ops = SnsOps::build(config.clone());
-                        rekognition_ops = RekognitionOps::build(config);
+                        rekognition_ops = RekognitionOps::build(config.clone());
+                        transcribe_ops = TranscribeOps::build(config);
                         println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".red().bold());
                     }
                 }
@@ -935,6 +939,217 @@ async fn main() {
                                 true => {
                                     println!("{}\n", "The Session ID can't be empty".red().bold())
                                 }
+                            }
+                        }
+                        "Return to the Main Menu\n" => continue 'main,
+                        _ => println!("Never Reach"),
+                    }
+                }
+            }
+            "Amazon Transcribe\n" => {
+                let transcribe_operations = vec![
+                    "Start Transcription Job\n",
+                    "Get Transcription Job\n",
+                    "Transcription Status\n",
+                    "Return to the Main Menu\n",
+                ];
+                loop {
+                    let transcribe_choices = Select::new(
+                        "Select the option to execute the operation\n",
+                        transcribe_operations.clone(),
+                    )
+                    .with_page_size(4)
+                    .with_help_message(
+                        "Only two of the APIs from the transcription service are being utilized",
+                    )
+                    .prompt()
+                    .unwrap();
+                    match transcribe_choices {
+                        "Start Transcription Job\n" => {
+                            let get_bucket_lists = s3_ops.get_buckets().await;
+                            let existing_buckets = format!(
+                                "These buckets are already in your account: {:#?}",
+                                get_bucket_lists
+                            );
+                            let bucket_name = Text::new("Please enter the output bucket name, where the task's output is stored upon completion\n")
+                                .with_placeholder(
+                                    &existing_buckets
+                                )
+                                .with_help_message("The name must begin with a lowercase letter and should be unique\nAn AWS bucket is a type of object storage designed for storing objects")
+                                .with_formatter(&|str| format!("Choosen Bucket Is: {str}"))
+                                .prompt()
+                                .unwrap();
+                            match bucket_name.is_empty() {
+                                false => {
+                                    let valid_formats =
+                                        "  mp3 |  mp4  |  wav  |  flac  |  ogg  |  amr  | webm  ";
+                                    let media_format =
+                                        Text::new("Choose the media format of your audio source\n")
+                                            .with_placeholder(valid_formats)
+                                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                                            .prompt()
+                                            .unwrap();
+                                    let object_names =
+                                        s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                                    let available_object_names = format!(
+                                        "The object names are in the {bucket_name} bucket and the URL should begin with: s3://{bucket_name}/ \n{}\n",
+                                        object_names.join("\n")
+                                    );
+                                    let format_of_s3_url = format!("Add the object key after this path: s3://{bucket_name}/");
+                                    let key_audio_name =
+                    Text::new("Enter the S3 key that contains the audio content you wish to transcribe\n")
+                        .with_placeholder(&available_object_names)
+                        .with_formatter(&|str| format!(".....{str}.....\n"))
+                        .with_help_message(&format_of_s3_url)
+                        .prompt()
+                        .unwrap();
+                                    let job_name = Text::new("Provide a unique, identifiable job name which will later be used to retrieve the transcription results\n")
+                .with_formatter(&|str| format!(".....{str}.....\n"))
+                .prompt()
+                .unwrap();
+                                    match (
+                                        media_format.is_empty(),
+                                        key_audio_name.is_empty(),
+                                        job_name.is_empty(),
+                                    ) {
+                                        (false, false, false) => {
+                                            transcribe_ops
+                                                .start_transcribe_task(
+                                                    &bucket_name,
+                                                    &key_audio_name,
+                                                    &media_format,
+                                                    &job_name,
+                                                )
+                                                .await;
+                                        }
+                                        _ => println!("{}\n", "Fields Can't be empty".red().bold()),
+                                    }
+                                }
+                                true => println!("{}\n", "Bucket Name Can't be emty".red().bold()),
+                            }
+                        }
+                        "Get Transcription Job\n" => {
+                            let job_name = Text::new("Please enter the job name to retrieve the results of the transcription task's initiation\n")
+                             .with_placeholder("You assigned the job name when initiating the transcription task")
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .prompt()
+                            .unwrap();
+                            match job_name.is_empty() {
+                                false => {
+                                    let transcribe_output =
+                                        transcribe_ops.get_transcribe_results(&job_name).await;
+                                    if let Some(mut output) = transcribe_output {
+                                        if let Some(status) = output.job_status() {
+                                            match status.as_str() {
+                                                "COMPLETED" => {
+                                                    println!(
+                                                        "{}\n",
+                                                        "The job Status is COMPLETED\n"
+                                                            .green()
+                                                            .bold()
+                                                    );
+                                                    output.print_transcription_info_as_text();
+                                                }
+                                                "QUEUED" => {
+                                                    println!(
+                                                        "{}\n",
+                                                        "The job Status is QUEUED\n"
+                                                            .yellow()
+                                                            .bold()
+                                                    );
+                                                }
+                                                "IN_PROGRESS" => {
+                                                }
+                                                "FAILED" => {
+                                                    println!(
+                                                        "{}\n",
+                                                        "The job Status is FAILED".yellow().bold()
+                                                    );
+                                                    println!(
+                                                        "Failed Reason: {}\n",
+                                                        output
+                                                            .failure_reason()
+                                                            .unwrap_or(
+                                                                "No Failure Reason Is Available"
+                                                                    .into()
+                                                            )
+                                                            .yellow()
+                                                            .bold()
+                                                    );
+                                                }
+
+                                                _ => println!("This can't be reached"),
+                                            }
+                                        }
+                                    }
+                                }
+                                true => println!("{}\n", "Job name can't be empty".red().bold()),
+                            }
+                        }
+                        "Transcription Status\n" => {
+                            let job_name = Text::new("Please enter the job name to display its status\n")
+                             .with_placeholder("You assigned the job name when initiating the transcription task")
+                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .prompt()
+                            .unwrap();
+                            match job_name.is_empty() {
+                                false => {
+                                    let transcribe_output =
+                                        transcribe_ops.get_transcribe_results(&job_name).await;
+                                    if let Some(mut output) = transcribe_output {
+                                        if let Some(status) = output.job_status() {
+                                            match status.as_str() {
+                                                "COMPLETED" => {
+                                                    println!(
+                                                        "{}\n",
+                                                        "The job Status is COMPLETED"
+                                                            .green()
+                                                            .bold()
+                                                    );
+                                                    println!("{}\n","Now, you can go ahead and execute the 'Get Transcribe Job' option to obtain the result".green().bold());
+                                                }
+                                                "QUEUED" => {
+                                                    println!(
+                                                        "{}\n",
+                                                        "The job Status is QUEUED"
+                                                            .yellow()
+                                                            .bold()
+                                                    );
+                                                    println!("{}\n","Let's try again after some time".yellow().bold());
+                                                }
+                                                "IN_PROGRESS" => {
+                                                    println!(
+                                                        "{}\n",
+                                                        "The job Status is IN_PROGRESS"
+                                                            .yellow()
+                                                            .bold()
+                                                    );
+                                                    println!("{}\n","Let's try again after some time".yellow().bold());
+                                                }
+                                                "FAILED" => {
+                                                    println!(
+                                                        "{}\n",
+                                                        "The job Status is FAILED".yellow().bold()
+                                                    );
+                                                    println!(
+                                                        "Failed Reason: {}\n",
+                                                        output
+                                                            .failure_reason()
+                                                            .unwrap_or(
+                                                                "No Failure Reason Is Available"
+                                                                    .into()
+                                                            )
+                                                            .yellow()
+                                                            .bold()
+                                                    );
+                                                }
+
+                                                _ => println!("This can't be reached"),
+                                            }
+                                        }
+                                    }
+                                }
+                                true => println!("{}\n", "Job name can't be empty".red().bold()),
                             }
                         }
                         "Return to the Main Menu\n" => continue 'main,
