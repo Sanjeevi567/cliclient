@@ -11,10 +11,10 @@ use std::io::{Read, Write};
 //Interneal APIs
 
 use aws_apis::{
-    load_credential_from_env, CredentInitialize, FaceDetails, MemDbOps, PollyOps, RdsOps,
-    RekognitionOps, S3Ops, SesOps, SimpleMail, Simple_, SnsOps, TemplateMail, Template_,
-    TextDetect,
+    load_credential_from_env, CredentInitialize, MemDbOps, PollyOps, RdsOps, RekognitionOps, S3Ops,
+    SesOps, SimpleMail, Simple_, SnsOps, TemplateMail, Template_,
 };
+use reqwest::get;
 
 use dotenv::dotenv;
 use std::env::var;
@@ -124,6 +124,7 @@ async fn main() {
                     "Start the Speech Synthesis Task\n",
                     "Get the Speech Synthesis Results\n",
                     "List all Speech Synthesis Tasks\n",
+                    "Generate All Voices Audio in MP3\n",
                     "Obtain voice information from Amazon Polly\n",
                     "Return to the Main Menu\n",
                 ];
@@ -141,7 +142,7 @@ async fn main() {
                     match polly_choices {
                         "Start the Speech Synthesis Task\n" => {
                             let possible_engines =
-                                "Possible Engine Values are: 'standard'\n'neural'\n";
+                                "Possible Engine Values are:\n    'standard'\n    'neural'\n";
                             let engine_name =
                                 Text::new("Select the speech generation engine name\n")
                                     .with_placeholder(possible_engines)
@@ -186,7 +187,7 @@ async fn main() {
                                         .prompt()
                                         .unwrap();
 
-                                    let possible_text_types = "ssml | text";
+                                    let possible_text_types = "    ssml  |     text";
                                     let text_type = Text::new("Please provide the text format of the content for which you would like to synthesize audio\n")
                          .with_placeholder(possible_text_types)
                          .with_formatter(&|str| format!(".....{str}.....\n"))
@@ -199,20 +200,20 @@ async fn main() {
                          .with_formatter(&|str| format!(".....{str}.....\n"))
                          .prompt()
                          .unwrap();
-                                    let valid_formats = "json | mp3 | ogg_vorbis | pcm";
+                                    let valid_formats = "  json |   mp3 |   ogg_vorbis |   pcm";
                                     let audio_output_format = Text::new("Please select the output format for the generated speech content\n")
                         .with_placeholder(valid_formats)
                         .with_formatter(&|str| format!(".....{str}.....\n"))
                         .prompt()
                         .unwrap();
                                     let available_buckets = format!(
-                                        "Available Buckets in your account: {:#?}\n",
+                                        "Available Buckets in your account:\n{:#?}\n",
                                         s3_ops.get_buckets().await
                                     );
                                     let bucket_name = Text::new("Amazon S3 bucket name to which the output file will be saved\n")
                          .with_placeholder(&available_buckets)
                          .with_formatter(&|str| format!(".....{str}.....\n"))
-                         .with_help_message("The chosen bucket name should be available in different regions to enable access")
+                         .with_help_message("The chosen bucket name should be available in different regions to enable multi region access")
                          .prompt()
                          .unwrap();
                                     match (
@@ -258,6 +259,86 @@ async fn main() {
                                 true => {
                                     println!("{}\n", "Engine name can't be left empty".red().bold())
                                 }
+                            }
+                        }
+                        "Generate All Voices Audio in MP3\n" => {
+                            let possible_engines =
+                                "Possible Engine Values are: '    standard'\n'    neural'\n";
+                            let engine_name =
+                                Text::new("Select the engine name for generating all the voices using this engine.\n")
+                                    .with_placeholder(possible_engines)
+                                    .with_formatter(&|input| format!("Received Engine Is: '{input}'\n"))
+                                    .prompt()
+                                    .unwrap();
+                            match engine_name.is_empty() {
+                                false => {
+                                    let (_, lang_codes) =
+                                        polly_ops.get_voice_info_given_engine(&engine_name).await;
+                                    let mut vec_of_lang_codes = Vec::new();
+                                    lang_codes.iter().for_each(|lang_code| {
+                                        if let Some(langcode) = lang_code {
+                                            vec_of_lang_codes.push(langcode.as_str().to_string());
+                                        }
+                                    });
+                                    let available_langcodes_specified_engine = format!("Language codes for the specified engine: {engine_name}\n{:?}\n",vec_of_lang_codes.join(" | "));
+
+                                    let language_code = Text::new("Select the audio language\n")
+                                        .with_placeholder(&available_langcodes_specified_engine)
+                                        .with_formatter(&|input| {
+                                            format!("Received Language Code Is: '{input}'\n")
+                                        })
+                                        .with_help_message(
+                                            "Click here https://tinyurl.com/27f3zbhd to learn more",
+                                        )
+                                        .prompt()
+                                        .unwrap();
+                                    let voice_counts = lang_codes.iter().count();
+                                    let placeholder_info =format!("A total of '{voice_counts}' voices will be generated for the SSML text you provide");
+                                    let text_to_generate_speech_path = Text::new("Please specify the path to the SSML text file\n")
+                                        .with_placeholder(&placeholder_info)
+                                        .with_help_message("Click here https://tinyurl.com/4pkdrepj to download the sample SSML text file")
+                                        .with_formatter(&|input| format!("Received SSML Text Path Is: '{input}'"))
+                                        .prompt()
+                                        .unwrap();
+                                    let path_prefix = Text::new("Enter the path prefix under which you want to save the content\n")
+                                        .with_placeholder("For example, 'neural/' or 'standard/ \n")
+                                        .with_formatter(&|input|format!("Received Path Prefix Is: {input}"))
+                                        .with_help_message("The directory will be created anew. Ensure that no directory with the same name as the one you specify already exists, and with each run, select a different directory prefix")
+                                        .prompt()
+                                        .unwrap();
+                                    match (
+                                        language_code.is_empty(),
+                                        text_to_generate_speech_path.is_empty(),
+                                        path_prefix.is_empty(),
+                                    ) {
+                                        (false, false, false) => {
+                                            std::fs::create_dir(&path_prefix)
+                                                .expect("Error while creating directory prefix\n");
+                                            let mut read_data = OpenOptions::new()
+                                                .read(true)
+                                                .write(true)
+                                                .open(&text_to_generate_speech_path)
+                                                .expect("Error while opening the ssml file path\n");
+                                            let mut text_data = String::new();
+                                            read_data
+                                                .read_to_string(&mut text_data)
+                                                .expect("Error while reading to string\n");
+                                            polly_ops
+                                                .generate_all_available_voices_in_mp3(
+                                                    &text_data,
+                                                    &language_code,
+                                                    &engine_name,
+                                                    &path_prefix,
+                                                )
+                                                .await;
+                                        }
+                                        _ => println!(
+                                            "{}\n",
+                                            "Fields should not be left empty".red().bold()
+                                        ),
+                                    }
+                                }
+                                true => println!("{}\n", "Engine Name can't be empty".red().bold()),
                             }
                         }
                         "Get the Speech Synthesis Results\n" => {
@@ -434,7 +515,7 @@ async fn main() {
                         "Face detection\n" => {
                             let get_buckets = s3_ops.get_buckets().await;
                             let available_buckets =
-                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+                                format!("Available buckets in your account:\n{:#?}\n", get_buckets);
                             let blob = "https://docs.rs/aws-sdk-rekognition/latest/aws_sdk_rekognition/primitives/struct.Blob.html";
                             let help_message = format!("S3 buckets are employed instead of {blob} types for processing face images");
                             let bucket_name = Text::new(
@@ -464,11 +545,11 @@ async fn main() {
                                             let face_info = rekognition_ops
                                                 .detect_faces(&object, &bucket_name)
                                                 .await;
-                                            face_info.into_iter().for_each(|facedetails| {
-                                                let gender = facedetails.get_gender();
+                                            face_info.into_iter().for_each(|mut facedetails| {
+                                                let gender = facedetails.gender();
                                                 let age = facedetails.age_range();
-                                                let smile = facedetails.get_smile();
-                                                let beard = facedetails.get_beard();
+                                                let smile = facedetails.smile();
+                                                let beard = facedetails.beard();
 
                                                 if let (
                                                     (Some(gender), Some(gender_confidence)),
@@ -519,7 +600,7 @@ async fn main() {
                         "Text detection\n" => {
                             let get_buckets = s3_ops.get_buckets().await;
                             let available_buckets =
-                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+                                format!("Available buckets in your account:\n{:#?}\n", get_buckets);
                             let blob = "https://docs.rs/aws-sdk-rekognition/latest/aws_sdk_rekognition/primitives/struct.Blob.html";
                             let help_message = format!("S3 buckets are employed instead of {blob} types for processing texts");
                             let bucket_name = Text::new(
@@ -549,10 +630,10 @@ async fn main() {
                                             let text_info = rekognition_ops
                                                 .detect_texts(&bucket_name, &object)
                                                 .await;
-                                            text_info.into_iter().for_each(|textdetails| {
-                                                let texts = textdetails.get_detected_text();
-                                                let text_type = textdetails.get_text_type();
-                                                let confidence = textdetails.get_confidence();
+                                            text_info.into_iter().for_each(|mut textdetails| {
+                                                let texts = textdetails.detected_text();
+                                                let text_type = textdetails.text_type();
+                                                let confidence = textdetails.confidence();
 
                                                 if let (
                                                     Some(text),
@@ -591,10 +672,10 @@ async fn main() {
                         "Start a face detection task\n" => {
                             let get_buckets = s3_ops.get_buckets().await;
                             let available_buckets =
-                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+                                format!("Available buckets in your account:\n{:#?}\n", get_buckets);
 
                             let help_message =
-                                format!("S3 buckets are used to store face and videos.");
+                                format!("S3 buckets are used to store face and videos");
                             let bucket_name = Text::new(
                                 "Select the bucket name where the face video is stored\n",
                             )
@@ -642,70 +723,40 @@ async fn main() {
                         "Get face detection results\n" => {
                             let job_id = Text::new("To obtain the results of the face detection task, please enter the job ID\n")
                                 .with_placeholder("The job ID was generated when you initiated the start face detection task\n")
-                                .with_formatter(&|str| format!("......{str}......"))
+                                .with_formatter(&|str| format!("......{str}......\n"))
                                 .prompt()
                                 .unwrap();
 
                             match job_id.is_empty() {
                                 false => {
-                                    let face_info =
+                                    let mut face_info =
                                         rekognition_ops.get_face_detection_results(&job_id).await;
-                                    let job_status = face_info.get_job_status();
-                                    let status_message = face_info.get_status_message();
-                                    let face_detail = face_info.get_face_detection();
-                                    if let (Some(job_status), Some(status_msg)) =
-                                        (job_status, status_message)
-                                    {
-                                        println!("Job Status is: {}\n", job_status.green().bold());
+                                    let job_status = face_info.job_status();
+                                    let status_message = face_info.status_message();
+                                    if let Some(job_status) = job_status {
+                                        match &*job_status {
+                                            "IN_PROGRESS" => {
+                                                println!("The job status is currently marked as '{}' which means no output is generated until the status changes to '{}'","IN_PROGRESS".green().bold(),"SUCCEEDED".yellow().bold());
+                                                println!("{}\n","Please check back after some time to obtain the results of the face detection process".yellow().bold());
+                                            }
+                                            "SUCCEEDED" => {
+                                                println!("It appears that the job status is now '{}', and the output processing has begun\n","SUCCEEDED".green().bold());
+                                                face_info
+                                                    .write_face_detection_results_as_text_and_pdf();
+                                            }
+                                            "FAILED" => {
+                                                println!("It appears that the job status is '{}'. For some reason, the face detection task has failed","FAILED".green().bold());
+                                                println!("{}\n","Please try again by restarting the face detection process. Good luck!\n".yellow().bold());
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    if let Some(status_msg) = status_message {
                                         println!(
                                             "Status Message is: {}\n",
                                             status_msg.green().bold()
                                         );
                                     }
-                                    face_detail.into_iter().for_each(|face_detection| {
-                                        let timestamp = face_detection.timestamp();
-                                        let face = face_detection.face();
-                                        if let Some(face_details) = face {
-                                            let facedetails =
-                                                FaceDetails::build(face_details.to_owned());
-                                            let beard = facedetails.get_beard();
-                                            let smile = facedetails.get_smile();
-                                            let gender = facedetails.get_gender();
-                                            let age = facedetails.age_range();
-                                            if let (
-                                                (Some(gender), Some(gender_confidence)),
-                                                (Some(age), Some(age_confidence)),
-                                                (Some(smile), Some(smile_confidence)),
-                                                (Some(beard), Some(beard_confidence)),
-                                            ) = (gender, age, smile, beard)
-                                            {
-                                                println!(
-                                                    "Timestamp: {}\n",
-                                                    timestamp.to_string().blue().bold()
-                                                );
-                                                println!(
-                                                    "Gender: {} and Confidence Level: {}\n",
-                                                    gender.green().bold(),
-                                                    gender_confidence.to_string().green().bold()
-                                                );
-                                                println!(
-                                                    "Age: {} and Confidence Level: {}\n",
-                                                    age.to_string().green().bold(),
-                                                    age_confidence.to_string().green().bold()
-                                                );
-                                                println!(
-                                                    "Beard: {} and Confidence Level: {}\n",
-                                                    beard.to_string().green().bold(),
-                                                    beard_confidence.to_string().green().bold()
-                                                );
-                                                println!(
-                                                    "Smile: {} and Confidence Level: {}\n",
-                                                    smile.to_string().green().bold(),
-                                                    smile_confidence.to_string().green().bold()
-                                                );
-                                            }
-                                        }
-                                    });
                                 }
                                 true => {
                                     println!("{}\n", "Job ID can't be empty".red().bold())
@@ -715,7 +766,7 @@ async fn main() {
                         "Start a text detection task\n" => {
                             let get_buckets = s3_ops.get_buckets().await;
                             let available_buckets =
-                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+                                format!("Available buckets in your account:\n{:#?}\n", get_buckets);
 
                             let help_message =
                                 format!("S3 buckets are used to store text and videos");
@@ -749,6 +800,7 @@ async fn main() {
                                                     &key_text_name,
                                                 )
                                                 .await;
+                                            println!("");
                                         }
                                         true => {
                                             println!(
@@ -771,53 +823,34 @@ async fn main() {
                             .unwrap();
                             match job_id.is_empty() {
                                 false => {
-                                    let text_results =
+                                    let mut text_results =
                                         rekognition_ops.get_text_detection_results(&job_id).await;
-                                    let job_status = text_results.get_job_status();
-                                    let status_message = text_results.get_status_message();
-                                    let text_detection = text_results.get_text_detect_result();
-                                    if let (Some(job_status), Some(status_msg)) =
-                                        (job_status, status_message)
-                                    {
-                                        println!("Job Status is: {}\n", job_status.green().bold());
+                                    let job_status = text_results.job_status();
+                                    let status_message = text_results.status_message();
+                                    if let Some(job_status) = job_status {
+                                        match &*job_status {
+                                            "IN_PROGRESS" => {
+                                                println!("The job status is currently marked as '{}' which means no output is generated until the status changes to '{}'","IN_PROGRESS".green().bold(),"SUCCEEDED".yellow().bold());
+                                                println!("{}\n","Please check back after some time to obtain the results of the face detection process".yellow().bold());
+                                            }
+                                            "SUCCEEDED" => {
+                                                println!("It appears that the job status is now '{}', and the output processing has begun\n","SUCCEEDED".green().bold());
+                                                text_results
+                                                    .write_text_detection_results_as_text_and_pdf();
+                                            }
+                                            "FAILED" => {
+                                                println!("It appears that the job status is '{}'. For some reason, the face detection task has failed","FAILED".green().bold());
+                                                println!("{}\n","Please try again by restarting the face detection process. Good luck!\n".yellow().bold());
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    if let Some(status_msg) = status_message {
                                         println!(
                                             "Status Message is: {}\n",
                                             status_msg.green().bold()
                                         );
                                     }
-                                    text_detection.into_iter().for_each(|text_outputs| {
-                                        let timestamp = text_outputs.timestamp();
-                                        let get_text = text_outputs.text_detection();
-                                        if let Some(text_detection) = get_text {
-                                            let textdetails =
-                                                TextDetect::build(text_detection.to_owned());
-
-                                            let texts = textdetails.get_detected_text();
-                                            let text_type = textdetails.get_text_type();
-                                            let confidence = textdetails.get_confidence();
-                                            println!(
-                                                "Timestamp: {}\n",
-                                                timestamp.to_string().green().bold()
-                                            );
-
-                                            if let (Some(text), Some(text_type), Some(confidence)) =
-                                                (texts, text_type, confidence)
-                                            {
-                                                println!(
-                                                    "Detected Text: {}\n",
-                                                    text.green().bold(),
-                                                );
-                                                println!(
-                                                    "Text Type: {}\n",
-                                                    text_type.green().bold(),
-                                                );
-                                                println!(
-                                                    "Confidence Level: {}\n",
-                                                    confidence.to_string().green().bold(),
-                                                );
-                                            }
-                                        }
-                                    });
                                 }
                                 true => println!("{}\n", "Job ID can't be empty".red().bold()),
                             }
@@ -825,7 +858,7 @@ async fn main() {
                         "Create Face Liveness task\n" => {
                             let get_buckets = s3_ops.get_buckets().await;
                             let available_buckets =
-                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+                                format!("Available buckets in your account:\n{:#?}\n", get_buckets);
 
                             let help_message = format!("S3 buckets are used to store videos");
                             let bucket_name = Text::new(
@@ -973,7 +1006,9 @@ async fn main() {
                                         .subscription(&topic_arn, &protocol, &end_point)
                                         .await;
                                 }
-                                _ => println!("{}\n", "No Fields can't be left empty".red().bold()),
+                                _ => {
+                                    println!("{}\n", "Fields should not be left empty".red().bold())
+                                }
                             }
                         }
                         "Add Phone Number\n" => {
@@ -1089,7 +1124,9 @@ async fn main() {
                                 (false, false) => {
                                     sns_ops.publish(&message, &topic_arn).await;
                                 }
-                                _ => println!("{}\n", "No fields can't be left empty".red().bold()),
+                                _ => {
+                                    println!("{}\n", "Fields should not be left empty".red().bold())
+                                }
                             }
                         }
 
@@ -1106,10 +1143,15 @@ async fn main() {
     "Delete Contact List Name\n",
     "Add an email to the list\n",
     "Default Values\n",
+    "Create Email Identity\n",
     "Email Verification\n",
-    "Print the emails from the provided list\n",
+    "Retrieve emails from the provided list\n",
+    "Get Email Identities\n",
     "Send a Simple Email to a Specific Recipient\n",
     "Create Email Template\n",
+    "Update Email Template\n",
+    "Get Email Template\n",
+    "Get Email Template Variables\n",
     "Delete Template\n",
     "Send a Templated Email to a Specified Email Address\n",
     "Send a simple email with the same body and subject to all the email addresses in the list\n",
@@ -1136,35 +1178,184 @@ async fn main() {
                             let template_name = Text::new(
                                 "Please provide the new template name for this template\n",)
                             .with_placeholder(&placeholder_info)
-                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                            .with_formatter(&|input| format!("Received Template Name Is: {input}\n"))
                             .prompt_skippable()
                             .unwrap()
                             .unwrap();
-                            
-                            let subject =Text::new("Please enter the subject with or without template variables\n")
-                                .with_placeholder("For example: 'Greetings, {{name}}' or simply 'Greetings'\n")
-                                .with_formatter(&|str| format!(".....{str}.....\n"))
-                                .prompt_skippable()
-                                .unwrap()
+
+                            let subject_path =Text::new("Please provide the path to the subject data in JSON format to create Subject for Email Template\n")
+                                .with_placeholder("The subject can contain template variables to personalize the email template's subject line\n")
+                                .with_help_message("An example subject template is available here ")
+                                .with_formatter(&|input| format!("Received Subject Is: {input}\n"))
+                                .prompt()
                                 .unwrap();
-                            let template_path = Text::new("Specify the path for the template you have created in '.json' formatt\n")
-                                      .with_formatter(&|str| format!(".....{str}.....\n"))
-                                      .with_placeholder("The HTML body can include your content and template variables for personalization\n")
+
+                            let template_path = Text::new("Please provide the path for the template in JSON format to Create a HTML body for the Email Template\n")
+                                      .with_formatter(&|input| format!("Received Template Path Is: {input}\n"))
+                                      .with_placeholder("")
                                       .with_help_message("Example template is available at this location: https://tinyurl.com/4na92rph")
                                       .prompt()
                                       .unwrap();
-                            match (template_name.is_empty(),subject.is_empty(),template_path.is_empty()){
+                            
+                            let text_path =Text::new("Please provide the path to the text body for the email template\n")
+                                .with_placeholder("This section is optional, but it's essential to include for recipients who do not support HTML\n")
+                                .with_formatter(&|input| format!("Received Text Body Is: {input}\n"))
+                                .with_help_message("Example text body data is available here ")
+                                .prompt_skippable()
+                                .unwrap()
+                                .unwrap();
+                            match (template_name.is_empty(),subject_path.is_empty(),template_path.is_empty()){
                                 (false,false,false) => {
                                     let mut reading_template_data = OpenOptions::new()
                                                                  .read(true)
                                                                  .write(true)
                                                                  .open(&template_path)
-                                                                 .expect("Error opening the file path you specified");
+                                                                 .expect("Error opening the Template file path you specified\n");
                         let mut template_data = String::new();
                          reading_template_data.read_to_string(&mut template_data).expect("Error while reading data\n");
-                         ses_ops.create_email_template(&template_name,&template_data,&subject).await;
+                         let mut reading_subject_data = OpenOptions::new()
+                                                                 .read(true)
+                                                                 .write(true)
+                                                                 .open(&subject_path)
+                                                                 .expect("Error opening the Subject file path you specified\n");
+                         let mut subject_data = String::new();
+                         reading_subject_data.read_to_string(&mut subject_data).expect("Error while reading data\n");
+
+                         match text_path.is_empty(){
+                            false => {
+                                let mut reading_text_data = OpenOptions::new()
+                                                                 .read(true)
+                                                                 .write(true)
+                                                                 .open(&text_path)
+                                                                 .expect("Error opening the Text Body file path you specified\n");
+                                let mut text_data = String::new();
+                                reading_text_data.read_to_string(&mut text_data).expect("Error opening the file path you specified\n");
+                                ses_ops.create_email_template(&template_name,&subject_data,&template_data,Some(text_data)).await;
+                            }
+                            true => {
+                                
+                                ses_ops.create_email_template(&template_name,&subject_data,&template_data,None).await;
+                            }
+                         }
+                         
                                 }
-                                _ => println!("{}\n","No Fields can be empty".red().bold())
+                                _ => println!("{}\n","Fields should not be left empty".red().bold())
+                            }
+                        }
+                        "Update Email Template\n" => {
+                            let get_available_template_names = ses_ops.list_email_templates().await;
+                            let placeholder_info = format!("Available Template Names in Your Credentials\n{:#?}",get_available_template_names);
+                            let template_name = Text::new(
+                                "Please provide the template name to update the associated template\n",)
+                            .with_placeholder(&placeholder_info)
+                            .with_formatter(&|input| format!("Received Template Name Is: {input}\n"))
+                            .prompt()
+                            .unwrap();
+                            match template_name.is_empty(){
+                                false => {
+                            let (current_subject,current_template_html,current_text) = ses_ops.get_template_subject_html_and_text(&template_name,false).await;
+                            let current_subject = format!("Your current email template subject is:\n {}",current_subject);
+                            let subject_path =Text::new("Please provide the path to the subject data in JSON format to update\n")
+                                .with_placeholder(&current_subject)
+                                .with_formatter(&|input| format!("Received Subject Is: {input}\n"))
+                                .prompt()
+                                .unwrap();
+                            let current_template_variables = ses_ops.get_template_variables_of_subject_and_html_body(&current_subject,&current_template_html);
+                            let current_template_variables = format!("These are the current template variables in the template named '{}'\n{}",template_name,current_template_variables.1.join("\n"));
+                            let template_path = Text::new("Please provide the path for the template in JSON format to update it with the old one\n")
+                                      .with_formatter(&|input| format!("Received Template Path Is: {input}\n"))
+                                      .with_placeholder(&current_template_variables)
+                                      .with_help_message("Example template is available at this location: https://tinyurl.com/4na92rph")
+                                      .prompt()
+                                      .unwrap();
+                            let current_text = format!("Your current email template text is:\n{}\n",current_text);
+                            let text_path =Text::new("Please provide the path to the text body for the email template\n")
+                                .with_placeholder(&current_text)
+                                .with_help_message("This section is optional, but it's essential to include for recipients who do not support HTML")
+                                .with_formatter(&|input| format!("Received Text Body Is: {input}\n"))
+                                .prompt_skippable()
+                                .unwrap()
+                                .unwrap();
+                            let mut reading_template_data = OpenOptions::new()
+                                                                 .read(true)
+                                                                 .write(true)
+                                                                 .open(&template_path)
+                                                                 .expect("Error opening the Template file path you specified\n");
+                            let mut template_data = String::new();
+                            reading_template_data.read_to_string(&mut template_data).expect("Error while reading template data\n");
+                            let mut reading_subject_data = OpenOptions::new()
+                            .read(true)
+                            .write(true)
+                            .open(&subject_path)
+                            .expect("Error opening the Subject file path you specified");
+                            let mut subject_data = String::new();
+                            reading_subject_data.read_to_string(&mut subject_data).expect("Error while reading subject data\n");
+
+
+                            match text_path.is_empty(){
+                                false => {
+                                    let mut read_text_data = OpenOptions::new()
+                                    .read(true)
+                                    .write(true)
+                                    .open(&text_path)
+                                    .expect("Error opening the Text Body file path you specified\n");
+                                    let mut text = String::new();
+                                    read_text_data.read_to_string(&mut text).expect("Error While Reading to String ");
+                                    ses_ops.update_template(&template_name,&subject_data,&template_data,Some(text)).await;
+
+                                }
+                                true => {
+                                    ses_ops.update_template(&template_name,&subject_data,&template_data,None).await;
+                                }
+                            }
+                                }
+                                true => println!("{}\n","Template Name can't be empty".red().bold())
+                            }
+                        }
+                        "Get Email Template\n" => {
+                            let get_available_template_names = ses_ops.list_email_templates().await;
+                            let placeholder_info = format!("Available Template Names in Your Credentials\n{:#?}",get_available_template_names);
+                            let template_name = Text::new(
+                                "Please provide the template name\n",)
+                            .with_placeholder(&placeholder_info)
+                            .with_formatter(&|input| format!("Received Template Name Is: {input}\n"))
+                            .prompt()
+                            .unwrap();
+                           match template_name.is_empty(){
+                              false => {
+                                ses_ops.get_template_subject_html_and_text(&template_name,true).await;
+                              }
+                              true => println!("{}\n","Template Name can't be empty".red().bold())
+                           }
+                        }
+                        "Get Email Template Variables\n" => {
+                            let get_available_template_names = ses_ops.list_email_templates().await;
+                            let placeholder_info = format!("Available Template Names in Your Credentials\n{:#?}",get_available_template_names);
+                            let template_name = Text::new(
+                                "Please provide the new template name for this template\n",)
+                            .with_placeholder(&placeholder_info)
+                            .with_formatter(&|input| format!("Received Template Name Is: {input}\n"))
+                            .prompt_skippable()
+                            .unwrap()
+                            .unwrap();
+                            match template_name.is_empty(){
+                                false => {
+                                    let (subject_data,template_data,_) = ses_ops.get_template_subject_html_and_text(&template_name,false).await;
+                                    let (subject_variables,html_variables) = ses_ops.get_template_variables_of_subject_and_html_body(&subject_data,&template_data);
+                                    println!("{}\n","Subject Template Variables if any".yellow().bold());
+                                    subject_variables.into_iter()
+                                    .for_each(|variable|{
+                                        println!("{}",variable.green().bold());
+                                    });
+                                    println!("");
+                                    println!("{}\n","HTML Template Variables if any".yellow().bold());
+                                    html_variables.into_iter()
+                                    .for_each(|variable|{
+                                        println!("{}",variable.green().bold());
+                                    });
+                                    println!("");
+                                }
+                                true => println!("{}\n","Template Name can't be empty".red().bold())
                             }
                         }
                         "Delete Template\n" => {
@@ -1266,6 +1457,19 @@ async fn main() {
                     _ => println!("{}\n","No email is received".red().bold()),
                 }
             }
+            "Create Email Identity\n" => {
+                let  email = Text::new("Enter the email\n")
+                    .with_placeholder("Emails should be without quotation marks around them\n")
+                    .with_formatter(&|str| format!(".....{str}.....\n"))
+                    .prompt()
+                    .unwrap();
+                match email.is_empty(){
+                    false => {
+                        ses_ops.create_email_identity(&email).await;
+                    }
+                    true => println!("{}\n","Email Can't be empty")
+                }
+            }
 
             "Email Verification\n" =>{
                 let email_to_verify = Text::new("Enter the email to check the identity\n")
@@ -1301,91 +1505,26 @@ async fn main() {
             }
 
 
-            "Print the emails from the provided list\n" => {
+            "Retrieve emails from the provided list\n" => {
               
                 let get_contact_list_name=ses_ops.get_list_name();
                 let get_contact_list_name = format!("Default contact list name: {}\n",get_contact_list_name);
-                
-
-                  let list_name = Text::new("Please enter the name of the list for which you'd like to print emails\n")
+                let list_name = Text::new("Please enter the name of the list for which you'd like to receive these emails in PDF and text formats\n")
                                        .with_placeholder(&get_contact_list_name)
-                                       .with_formatter(&|str| format!(".....{str}....."))
-                                       .prompt_skippable()
-                                       .unwrap()
-                                       .unwrap();
-                 let print_emails = Confirm::new("You are tasked with printing all the emails in the list\n")
-                                       .with_placeholder("Select 'Yes' to print emails or 'No' to save them to the current directory\n")
                                        .with_formatter(&|str| format!(".....{str}....."))
                                        .prompt_skippable()
                                        .unwrap()
                                        .unwrap();
                  match list_name.is_empty() {
                      false =>{
-                           match print_emails{
-                            true =>{
-                                let upto = Text::new("How many emails would you like to print?\n")
-                                                     .with_placeholder("Values should be non-zero; if no value is provided, it defaults to zero\n")
-                                                     .with_formatter(&|str| format!(".....{str}....."))
-                                                     .prompt_skippable()
-                                                     .unwrap()
-                                                     .unwrap();
-                                    match upto.is_empty(){
-                                        false =>{
-                                            println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
-                                            let parse_to_digit = upto.parse::<usize>().unwrap();
-                                            ses_ops.printing_email_addresses_from_provided_list(Some(&list_name), true, Some(parse_to_digit)).await;
-
-                                        }
-                                        true =>{
-                                            println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
-                                            ses_ops.printing_email_addresses_from_provided_list(Some(&list_name), true, None).await;
-
-                                        }
-
-                                    }
-
-                            },
-                            false =>{
-                            ses_ops.printing_email_addresses_from_provided_list(Some(&list_name), false, None).await;
-  
-                            }
-                           }
+                        ses_ops.writing_email_addresses_from_provided_list_as_text_pdf(Some(&list_name)).await;
                      }
                      true => {
-                        match print_emails{
-                            true =>{
-                                let upto = Text::new("How many emails would you like to print?\n")
-                                                     .with_placeholder("Values should be non-zero; if no value is provided, it defaults to zero\n")
-                                                    .with_formatter(&|str| format!(".....{str}....."))
-                                                     .prompt_skippable()
-                                                     .unwrap()
-                                                     .unwrap();
-                                    match upto.is_empty(){
-                                        false =>{
-                                            println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
-                                            let parse_to_digit = upto.parse::<usize>().unwrap();
-                                            ses_ops.printing_email_addresses_from_provided_list(None, true, Some(parse_to_digit)).await;
-
-                                        }
-                                        true =>{
-                                            println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());  
-                                            ses_ops.printing_email_addresses_from_provided_list(None, true, None).await;
-
-                                        }
-
-                                    }
-
-                            },
-                            false =>{
-                                println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
-                                ses_ops.printing_email_addresses_from_provided_list(None, false, None).await;  
-                            }
-                         
-
-                     }
-                 }                   
+                        ses_ops.writing_email_addresses_from_provided_list_as_text_pdf(None).await;
+                     }                   
                     
- }},
+                } 
+},
             "Default Values\n" => {
                 let default_list_name = ses_ops.get_list_name().green().bold();
                 let default_template_name = ses_ops.get_template_name().green().bold();
@@ -1402,67 +1541,114 @@ async fn main() {
 
                 let email = Text::new("Enter the email..\n")
                                    .with_formatter(&|str| format!(".....{str}....."))
+                                   .with_placeholder("The provided email should be added to the list and verified")
                                    .prompt()
                                    .unwrap();
-                println!("{email}");
-
                 let subject = Text::new("Enter the subject of Email\n")
+                                 .with_placeholder("Eg: For testing purposes, we have launched a new product")
                                  .with_formatter(&|str| format!(".....{str}....."))
                                  .prompt().unwrap();
-
-                let body = Text::new("Enter the message body to display to the recipient\n")
-                                 .with_formatter(&|str| format!(".....{str}....."))
-                                .prompt()
-                                .unwrap();
                  
                 let defaul_from_address = ses_ops.get_from_address();
         
                 let default_from_address =format!("Your 'from_address' needs to be verified, which is typically your email\nand the default 'from_address' is {}",defaul_from_address);
 
-                let from_address = Text::new("Enter the 'from' address or press enter to use default from_address if any\n")
+                let from_address = Text::new("Please enter the 'From' address, or press Enter to use the default 'From' address, if one is available in the placeholder\n")
                     .with_placeholder(&default_from_address)
                     .with_formatter(&|str| format!(".....{str}....."))
                     .prompt_skippable()
                     .unwrap()
                     .unwrap();
-                let simple_email = SimpleMail::builder(
-                    &body,
-                    &subject
-                )
-                .build();
+                let body_info = Confirm::new("You can either provide the email body from a local file path or any S3 object URLs can be passed, and they should be publicly accessible. Not all links provide the exact content we requested\n")
+                .with_formatter(&|str| format!(".....{str}....."))
+                .with_placeholder("Please respond with 'Yes' to provide a local file or 'No' to provide a S3 Object Url link\n")
+                .prompt()
+                .unwrap();
 
-                match (email.is_empty(), subject.is_empty(), body.is_empty(),from_address.is_empty()) {
-                    (false, false, false,false) => {
+                match (email.is_empty(), subject.is_empty(), body_info) {
+                    (false, false, true) => {
+                        let from_address = match from_address.is_empty(){
+                            true => None,
+                            false => Some(from_address.as_str())
+                        };
+                        let body_path = Text::new("Please provide the path to the body of a simple email content file\n")
+                        .with_formatter(&|str| format!(".....{str}....."))
+                        .with_placeholder("Any file extension is acceptable as long as it can be read and contains only text content or an HTML body, without any template variables\n")
+                        .with_help_message("You can find an example of simple email content here ")
+                        .prompt()
+                        .unwrap();
+                        let mut reading_simple_data = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(&body_path)
+                        .expect("Error opening the simple email file path you specified");
+                        let mut body_data = String::new();
+                        reading_simple_data.read_to_string(&mut body_data).expect("Error while reading to string\n");
+                        let simple_email = SimpleMail::builder(
+                            &body_data,
+                            &subject
+                        )
+                        .build();
+
                              ses_ops
-                            .send_mono_email(&email, Simple_(simple_email),Some(&from_address))
+                            .send_mono_email(&email, Simple_(simple_email),from_address)
                             .await
                             .send()
                             .await
                             .map(|_|{
                                 let colored_email = email.green().bold();
-                                println!("An Email is send succesfully to: {}",colored_email)
+                                println!("A simple email has been successfully sent to '{}'\n{}\n",colored_email,"Please check your inbox to view it".yellow().bold())
                               })
-                            .unwrap();
+                            .expect("Error while Sending Simple Email\n");
                           
                     }
-                    (false,false,false,true) => {
-                          
+                    (false,false,false) => {
+                        let from_address = match from_address.is_empty(){
+                            true => None,
+                            false => Some(from_address.as_str())
+                        };
+                        let body_link = Text::new("Please provide the link to the body of a simple email content file\n")
+                        .with_formatter(&|str| format!(".....{str}....."))
+                        .with_placeholder("Any file extension is acceptable as long as it can be read and contains only text content or an HTML body, without any template variables\n")
+                        .with_help_message("Here is the S3 object URL that you can use to send an email or open a link to access the content:\n https://tinyurl.com/mr22bh4f")
+                        .prompt()
+                        .unwrap();
+                        match get(&body_link).await{
+                            Ok(body) => {
+                                let body_data = body.text().await.expect("Error while getting text data\n");
+                                let x: &[_] = &['\n','\r',' ','\x1b','\u{20}','\u{7f}','\u{80}'];
+                                let body_data = body_data.trim_matches(x);
+                                let simple_email = SimpleMail::builder(
+                                  body_data,
+                                  &subject
+                                  )
+                                  .build();
+                                
                                  ses_ops
-                                .send_mono_email(&email, Simple_(simple_email),None)
+                                .send_mono_email(&email, Simple_(simple_email),from_address)
                                 .await
                                 .send()
                                 .await
                                 .map(|_|{
                                     let colored_email = email.green().bold();
-                                    println!("An Email is send succesfully to: {}",colored_email)
+                                    println!("A simple email has been successfully sent to '{}'\n{}\n",colored_email,"Please check your inbox to view it".yellow().bold())
                                    })
-                                .unwrap();
+                                .expect("Error While Sending Simple Email\n");
+
+                            }
+                            Err(_) => println!("{}\n","The provided link doesn't seem to be working. Could you please check the link and try again?".red().bold())
+                        }
+                        
+                        
                           
                     }
                     _ => {
                         println!("{}\n","Email,subject or body can't be empty".red().bold());
                     }
                 }
+            }
+            "Get Email Identities\n" => {
+                ses_ops.writing_email_identies_details_as_text_pdf().await;
             }
             "Send a Templated Email to a Specified Email Address\n" => {
 
@@ -1483,8 +1669,7 @@ async fn main() {
             .with_help_message(
                 "The template name must exist, and the variables should be specified as key-value pairs according to the template\n",
             )
-            .prompt_skippable()
-            .unwrap()
+            .prompt()
             .unwrap();
             
             let from_address =Text::new("Enter the from address\n")
@@ -1690,6 +1875,7 @@ async fn main() {
                     "Create Bucket\n",
                     "Default Region Name\n",
                     "Put object in a Bucket\n",
+                    "Modifying Object Visibility\n",
                     "List objects from a Bucket\n",
                     "Download object from bucket\n",
                     "Retrieve a presigned URL for an object\n",
@@ -1749,9 +1935,9 @@ async fn main() {
                         "List objects from a Bucket\n" => {
                             let get_bucket_name = s3_ops.get_buckets().await;
                             let bucket_names =
-                                format!("Available buckets are: {:#?}\n", get_bucket_name);
+                                format!("Available buckets are:\n{:#?}\n", get_bucket_name);
 
-                            let bucket_name = Text::new("Please input the name of the bucket")
+                            let bucket_name = Text::new("Please input the name of the bucket\n")
                                 .with_placeholder(&bucket_names)
                                 .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
@@ -1780,7 +1966,7 @@ async fn main() {
                         "Delete object from a bucket\n" => {
                             let get_bucket_lists = s3_ops.get_buckets().await;
                             let existing_buckets = format!(
-                                "These buckets are already in your account: {:#?}",
+                                "These buckets are already in your account:\n{:#?}\n",
                                 get_bucket_lists
                             );
                             let bucket_name = Text::new("Please input the name of the bucket\n")
@@ -1794,8 +1980,8 @@ async fn main() {
                                     let object_names =
                                         s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
                                     let available_object_names = format!(
-                                        "The object names are in the {bucket_name} bucket: {:#?}\n",
-                                        object_names
+                                        "The object names are in the {bucket_name} bucket:\n{}\n",
+                                        object_names.join("\n")
                                     );
                                     let object_name =
                                         Text::new("Enter the object/key name to delete\n")
@@ -1821,7 +2007,7 @@ async fn main() {
                         "Delete Bucket\n" => {
                             let get_bucket_name = s3_ops.get_buckets().await;
                             let bucket_names = format!(
-                                "Below, you'll find the buckets in your account: {:?}\n",
+                                "Below, you'll find the buckets in your account:\n{:?}\n",
                                 get_bucket_name
                             );
                             let bucket_name = Text::new("Enter the bucket name to delete")
@@ -1847,7 +2033,7 @@ async fn main() {
                         "Put object in a Bucket\n" => {
                             let object = Text::new("Enter the object/data path\n")
                                 .with_placeholder(
-                                    "You can copy the path and ctrl+shift+v to paste it here",
+                                    "You can copy the path and ctrl+shift+v to paste it here without quotation around it",
                                 )
                                 .with_formatter(&|str| format!(".....{str}.....\n"))
                                 .prompt()
@@ -1855,7 +2041,7 @@ async fn main() {
 
                             let get_bucket_name = s3_ops.get_buckets().await;
                             let available_bucket_name = format!(
-                                "Available bucket names in your account: {:?}",
+                                "Available bucket names in your account:\n {:#?}\n",
                                 get_bucket_name
                             );
                             let bucket_name = Text::new("Enter the bucket name\n")
@@ -1883,11 +2069,60 @@ async fn main() {
                                 }
                             }
                         }
+                        "Modifying Object Visibility\n" => {
+                            let get_bucket_name = s3_ops.get_buckets().await;
+                            let available_bucket_name = format!(
+                                "Available bucket names in your account:\n {:?}\n",
+                                get_bucket_name
+                            );
+                            let bucket_name = Text::new("Enter bucket name that contains the object to which you want to attach the ACL or Permission\n")
+                                .with_placeholder(&available_bucket_name)
+                                .with_formatter(&|str| format!(".....{str}.....\n"))
+                                .with_help_message("This is where we put the actual data")
+                                .prompt()
+                                .unwrap();
+                            match bucket_name.is_empty() {
+                                false => {
+                                    let object_names =
+                                        s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                                    let available_object_names = format!(
+                                        "The object names are in the {bucket_name} bucket:\n{:#?}\n",
+                                        object_names
+                                    );
+                                    let object_name =
+                                        Text::new("Please enter the object name for which you'd like to modify permissions\n")
+                                            .with_placeholder(&available_object_names)
+                                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                                            .prompt()
+                                            .unwrap();
+                                    let possible_acl_values ="private | public-read | public-read-write | authenticated-read";
+                                    let permission_string =
+                                        Text::new("Enter the ACL permission strings\n")
+                                            .with_placeholder(possible_acl_values)
+                                            .with_formatter(&|str| format!(".....{str}.....\n"))
+                                            .prompt()
+                                            .unwrap();
+                                    match (object_name.is_empty(), permission_string.is_empty()) {
+                                        (false, false) => {
+                                            s3_ops
+                                                .put_object_acl(
+                                                    &bucket_name,
+                                                    &object_name,
+                                                    &permission_string,
+                                                )
+                                                .await;
+                                        }
+                                        _ => println!("{}\n", "Fields can't be empty".red().bold()),
+                                    }
+                                }
+                                true => println!("{}\n", "Bucket Name Can't be empty".red().bold()),
+                            }
+                        }
 
                         "Download object from bucket\n" => {
                             let get_buckets = s3_ops.get_buckets().await;
                             let available_buckets =
-                                format!("Available buckets in your account: {:#?}\n", get_buckets);
+                                format!("Available buckets in your account:\n{:#?}\n", get_buckets);
 
                             let bucket_name = Text::new("Input the bucket name\n")
                                 .with_placeholder(&available_buckets)
@@ -1929,8 +2164,10 @@ async fn main() {
 
                         "Retrieve a presigned URL for an object\n" => {
                             let get_bucket_name = s3_ops.get_buckets().await;
-                            let available_bucket_name =
-                                format!("Available buckets in your account: {:?}", get_bucket_name);
+                            let available_bucket_name = format!(
+                                "Available buckets in your account:\n {:?}\n",
+                                get_bucket_name
+                            );
                             let bucket_name = Text::new("Enter the bucket name\n")
                                 .with_placeholder(&available_bucket_name)
                                 .with_formatter(&|str| format!(".....{str}.....\n"))
@@ -2119,7 +2356,9 @@ async fn main() {
                                         ),
                                     }
                                 }
-                                _ => println!("{}\n", "Fields cannot be left empty.".red().bold()),
+                                _ => {
+                                    println!("{}\n", "Fields should not be left empty".red().bold())
+                                }
                             }
                         }
 
@@ -2406,7 +2645,9 @@ async fn main() {
                                         )
                                         .await
                                 }
-                                _ => println!("{}\n", "Fields cannot be left empty.".red().bold()),
+                                _ => {
+                                    println!("{}\n", "Fields should not be left empty".red().bold())
+                                }
                             }
                         }
 
@@ -2630,7 +2871,9 @@ async fn main() {
                                         .create_memdb_cluster(&node_type, &cluster_name, &acl_name)
                                         .await;
                                 }
-                                _ => println!("{}\n", "Fields cannot be left empty.".red().bold()),
+                                _ => {
+                                    println!("{}\n", "Fields should not be left empty".red().bold())
+                                }
                             }
                         }
                         "Create MemDb User\n" => {
@@ -2695,7 +2938,9 @@ async fn main() {
                                         ),
                                     }
                                 }
-                                _ => println!("{}\n", "Fields cannot be left empty.".red().bold()),
+                                _ => {
+                                    println!("{}\n", "Fields should not be left empty".red().bold())
+                                }
                             }
                         }
 
@@ -2708,7 +2953,7 @@ async fn main() {
                                     acl_names.push(acl_name_);
                                 }
                             });
-                            let available_acl_names = format!("List of Access Control List (ACL) Names in Your Credentials: {:#?}",acl_names);
+                            let available_acl_names = format!("List of Access Control List (ACL) Names in Your Credentials:\n {:#?}\n",acl_names);
                             let acl_name = Text::new(
                                 "Please enter the ACL name for the information you seek\n",
                             )
@@ -2794,7 +3039,7 @@ async fn main() {
                                     user_info[0].print_auth_info();
                                 }
                                 true => {
-                                    println!("{}\n", "Fields cannot be left empty.".red().bold())
+                                    println!("{}\n", "Fields should not be left empty".red().bold())
                                 }
                             }
                         }
@@ -2859,7 +3104,7 @@ async fn main() {
                                     acl_names.push(acl_name_);
                                 }
                             });
-                            let available_acl_names = format!("List of Access Control List (ACL) Names in Your Credentials: {:#?}",acl_names);
+                            let available_acl_names = format!("List of Access Control List (ACL) Names in Your Credentials:\n{:#?}",acl_names);
                             let acl_name = Text::new(
                                 "Please provide the name of the ACL you wish to delete\n",
                             )
@@ -2933,7 +3178,9 @@ async fn main() {
                                         .delete_memdb_cluster(&cluster_name, &final_snapshot_name)
                                         .await;
                                 }
-                                _ => println!("{}\n", "Fields cannot be left empty".red().bold()),
+                                _ => {
+                                    println!("{}\n", "Fields should not be left empty".red().bold())
+                                }
                             }
                         }
                         "Return to the Main Menu\n" => continue 'main,

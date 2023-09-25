@@ -1,0 +1,10 @@
+<speak>
+Your name is Sanjeevi and it is spelled as <say-as interpret-as="characters">SANJEEVI</say-as>.
+I'm going to take a 3-second break<break time="3s"/>.
+Traveling at a speed of 450<sub alias="kilometers per hour">kmh</sub> is an achievement reserved for the Bugatti Chiron car.<break time="1s"/>.
+Rust hi lughat barmajat qawiat waminat tustakhdam litatwir tatbiqat ealiat al'ada'i. tustkhdm Rust likitabat baramij dhat jawdat ealiat wamawthuqatin, watamnah almutawirin alqudrat ealaa tajanub al'akhta' alshaayieat fi albarmajat wadaman 'aman aldhaakirati. aktashaf quatan Rust wastamtae bi'iinsha' tatbiqat mubtakarat wamawthuqatin. The Arabic language above is equivalent to the following English words.<break time="2s"/>.
+Rust is a powerful and safe programming language used to develop high-performance applications. Rust is used to write high-quality and reliable programs, and gives developers the ability to avoid common programming errors and ensure memory safety. Discover the power of Rust and have fun creating innovative and reliable applications.
+<amazon:auto-breaths>
+Rust, the language for safe, concurrent systems, meets AWS, the cloud computing powerhouse. Harness the power of both, building robust, scalable, and secure cloud applications.
+</amazon:auto-breaths>.
+</speak>

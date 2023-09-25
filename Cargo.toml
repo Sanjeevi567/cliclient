@@ -12,10 +12,15 @@ inquire = {version = "0.6.2",features = ["editor"]}
 spinoff = "0.8.0"
 colored = "2.0.4"
 aws_apis = {git = "https://github.com/Sanjuvi/aws_apis.git"}
+reqwest="0.11.20"
 
 tokio = {version ="1.32.0",features = ["macros","rt-multi-thread"]}
 dotenv ="0.15.0"
 
+#Regex is employed for locating template variables within the provided data, especially when updating a template. 
+# This is particularly useful for providing information about the template during updates. It is also utilized in 
+#the utility function called get_template_variables within S3 operations
+regex ="1.9.5"
 
 
 

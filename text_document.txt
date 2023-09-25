@@ -1,9 +1,0 @@
-ctrl + shift + v to paste in command lines instead of ctrl + v which doesn't work
-
-one 
-"{\"Name\":\"Sanjeevi\",\"Email\":\"sanjeevimani567@gmail.com\"}"
-
-"{'Name':'Sanjeevi','Email':'sanjeevimani567@gmail.com'}"
-
-
-

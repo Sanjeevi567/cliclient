@@ -1,6 +1,0 @@
-<speak>
-Your name is Sanjeevi and it is spelled as <say-as interpret-as="characters">SANJEEVI</say-as>.
-I'm going to take a 3-second break<break time="3s"/>.
-I'm going to play an audio for you.
-<audio src="https://demo567.s3.ap-south-1.amazonaws.com/audio/heat_waves.mp3">Can't play the audio</audio>
-</speak>
