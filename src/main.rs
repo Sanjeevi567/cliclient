@@ -5,14 +5,20 @@ use inquire::{
     Confirm, Select, Text,
 };
 
-use std::fs::OpenOptions;
+use std::fs::{create_dir, read_dir, remove_dir_all, OpenOptions};
 use std::io::{Read, Write};
+
+use image::{self, Rgba};
+use imageproc::drawing::draw_text_mut;
+use regex::Regex;
+use rusttype::{Font, Scale};
 
 //Interneal APIs
 
 use aws_apis::{
-    load_credential_from_env, CredentInitialize, MemDbOps, PollyOps, RdsOps, RekognitionOps, S3Ops,
-    SesOps, SimpleMail, Simple_, SnsOps, TemplateMail, Template_, TranscribeOps,
+    create_detect_face_image_pdf, load_credential_from_env, CredentInitialize, MemDbOps, PollyOps,
+    RdsOps, RekognitionOps, S3Ops, SesOps, SimpleMail, Simple_, SnsOps, TemplateMail, Template_,
+    TranscribeOps,
 };
 use reqwest::get;
 
@@ -409,9 +415,8 @@ async fn main() {
                                                 .write(true)
                                                 .open("audio_uri.txt")
                                                 .unwrap();
-                                            let uri_data = format!(
-                                                "URL for the synthesized audio: {colored_uri}\n"
-                                            );
+                                            let uri_data =
+                                                format!("URL for the synthesized audio: {uri}\n");
 
                                             file.write_all(uri_data.as_bytes())
                                                 .expect("Error while writing...");
@@ -499,6 +504,8 @@ async fn main() {
                 let rekog_ops = vec![
                     "Face detection\n",
                     "Text detection\n",
+                    "Upload images to an S3 bucket\n",
+                    "Write images with facial details obtained from Rekognition's 'DetectFaces' feature\n",
                     "Start a face detection task\n",
                     "Get face detection results\n",
                     "Start a text detection task\n",
@@ -516,6 +523,204 @@ async fn main() {
                     .prompt()
                     .unwrap();
                     match rekog_choices {
+                        "Upload images to an S3 bucket\n" => {
+                            let get_buckets = s3_ops.get_buckets().await;
+                            let available_buckets =
+                                format!("Available buckets in your account:\n{:#?}\n", get_buckets);
+                            let bucket_name = Text::new("Please enter the bucket name where you'd like to store images for the Face Detection API\n")
+                            .with_placeholder(&available_buckets)
+                            .with_formatter(&|input| format!("Received Bucket Name: {input}\n"))
+                            .with_help_message("Ensure that the chosen bucket and region match")
+                            .prompt()
+                            .unwrap();
+                        
+                        let local_path_prefix = Text::new("Provide the local path prefix where your all images are stored\n")
+                            .with_placeholder("Please Note that the images will be resized to 700x700 pixels, but the original images on your computer will remain unchanged\n")
+                            .with_formatter(&|input| format!("Received Local Path Prefix: {input}\n"))
+                            .with_help_message("These images should be in either '.jpg' or '.png' format")
+                            .prompt()
+                            .unwrap();
+                        match (bucket_name.is_empty(),local_path_prefix.is_empty()){
+                            (false,false) => {
+                                let get_objects =
+                                s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                            let available_objects = format!(
+                                "Available keys and path prefix in {bucket_name}\n{:#?}\n",
+                                get_objects
+                            );
+                            let bucket_path_prefix = Text::new("Select a prefix for the bucket where the images will be saved\n")
+                            .with_placeholder(&available_objects)
+                            .with_help_message("For example, you can use 'face_images/' or 'images/'")
+                            .with_formatter(&|input| format!("Received Bucket Path Prefix: {input}"))
+                            .prompt()
+                            .unwrap();
+                            let create_temp_dir = "modified/";
+                            create_dir(create_temp_dir).expect("Error while creating modified/ temp directory\n");
+                            let entries = read_dir(&local_path_prefix).expect("Error while reading directory\n");
+                            for entry in entries {
+                                let entry = entry.expect("Error while reading entries in the directory");
+                                match entry.file_name().to_str() {
+                                    Some(image_name) => {
+                                        let local_image_file_name = format!("{local_path_prefix}/{image_name}");
+                                        let image = image::open(&local_image_file_name)
+                                            .expect("Error while reading the image from path\n");
+                                        let image = image.resize_exact(700, 700, image::imageops::FilterType::Gaussian);
+                                        let path_and_file_name = format!("{create_temp_dir}{image_name}");
+                                        image
+                                            .save(&path_and_file_name)
+                                            .expect("Error while writing image file\n");
+                                        let have_slash_and_dot_pattern =
+                                            Regex::new(r#"([^./]+)\.([^/]+)"#).expect("Error while parsing Regex Syntax\n");
+                                        let file_name: Vec<&str> = have_slash_and_dot_pattern
+                                            .find_iter(&path_and_file_name)
+                                            .map(|string| string.as_str())
+                                            .collect();
+                                        println!("{}\n", file_name.join(""));
+                                        let key_name = format!("{bucket_path_prefix}{}", file_name.join(""));
+                                        println!("{key_name}");
+                                        s3_ops
+                                            .upload_content_to_a_bucket(&bucket_name, &path_and_file_name, &key_name)
+                                            .await;
+                                    }
+                                    None => println!("{}\n", "No file is found".red().bold()),
+                                }
+                            }
+                            remove_dir_all("modified/")
+                                .expect("Error while deleing modified temp directory the directory\n");
+                            }
+                            _ => println!("{}\n","No fields can be empty".red().bold())
+                        }
+                    
+                        }
+                        "Write images with facial details obtained from Rekognition's 'DetectFaces' feature\n" => {
+                            let get_buckets = s3_ops.get_buckets().await;
+                            let available_buckets =
+                                format!("Available buckets in your account:\n{:#?}\n", get_buckets);
+                            let bucket_name = Text::new("Please enter the name of the bucket where the images are stored\n")
+                            .with_placeholder(&available_buckets)
+                            .with_formatter(&|input| format!("Received Bucket Name Is: {input}"))
+                            .prompt()
+                            .unwrap();
+                        
+                        match bucket_name.is_empty(){
+                            false => {
+                                let get_objects =
+                                s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
+                            let available_objects = format!(
+                                "Available keys and path prefix in {bucket_name}\n{:#?}\n",
+                                get_objects
+                            );
+                            let bucket_path_prefix = Text::new("Enter the path prefix within the bucket where the images are stored\n")
+                            .with_formatter(&|input| format!("Received Bucket Path Prefix Is: {input}"))
+                            .with_placeholder(&available_objects)
+                            .with_help_message("Please ensure that there is no 'face_details_images' directory in the current path where the binary is running")
+                            .prompt()
+                            .unwrap();
+                        let mut file = OpenOptions::new()
+                        .create(true)
+                        .read(true)
+                        .write(true)
+                        .open("Face_details.txt")
+                        .unwrap();
+                
+                    let entries = s3_ops.list_objects_given_prefix(&bucket_name, &bucket_path_prefix).await;
+                    let face_details_images = "face_details_images/";
+                    create_dir(face_details_images)
+                        .expect("Error while creating face_details_image/ directory for writting images\n");
+                    let local_path_prefix = "read_images/";
+                    create_dir(local_path_prefix).expect("Error while creating read_images/ temp directory\n");
+                
+                    for image_path in entries.iter().skip(1) {
+                        s3_ops
+                            .download_content_from_bcuket(&bucket_name, &image_path, Some(local_path_prefix), false)
+                            .await;
+                        let outputs = rekognition_ops.detect_faces(&image_path, &bucket_name).await;
+                        for mut face_detail in outputs.into_iter() {
+                            let have_slash_and_dot_pattern =
+                                Regex::new(r#"([^./]+)\.([^/]+)"#).expect("Error while parsing Regex Syntax\n");
+                            let image_name: Vec<&str> = have_slash_and_dot_pattern
+                                .find_iter(&image_path)
+                                .map(|string| string.as_str())
+                                .collect();
+                            println!(
+                                "{} {}\n",
+                                "Details of image".yellow().bold(),
+                                image_name.join("").green().bold()
+                            );
+                            if let (
+                                (Some(smile), Some(smile_confidence)),
+                                (Some(gender), Some(gender_confidence)),
+                                (Some(age_range), Some(age_confidence)),
+                                (Some(beard), Some(beard_confidence)),
+                                (Some(width), Some(height), Some(left), Some(top)),
+                            ) = (
+                                face_detail.smile(),
+                                face_detail.gender(),
+                                face_detail.age_range(),
+                                face_detail.beard(),
+                                face_detail.bounding_box(),
+                            ) {
+                                let details = vec![
+                                    format!("Details of image: {}\n", image_name.join("")),
+                                    format!("Gender: {gender}, with a confidence level of {gender_confidence}\n"),
+                                    format!(
+                                        "Age Range: {age_range}, with a confidence level of {age_confidence}\n"
+                                    ),
+                                    format!("Beard: {beard}, with a confidence level of {beard_confidence}\n"),
+                                    format!("Smile: {smile}, with a confidence level of {smile_confidence}\n"),
+                                    format!(
+                                        "Bounding Box Details: Width: {}, Height: {}, Left: {}, Top: {}\n\n",
+                                        width, height, left, top
+                                    ),
+                                ];
+                                for detail in details {
+                                    file.write_all(detail.as_bytes()).unwrap();
+                                }
+                                //drawing code
+                                let read_image_path = format!("{local_path_prefix}{}", image_name.join(""));
+                                let mut image = image::open(&read_image_path)
+                                    .expect("Error while reading the image from path\n");
+                                let scale = Scale::uniform(30.0);
+                                let color = Rgba([255u8, 0u8, 0u8, 127u8]);
+                                let data_ = include_bytes!("./../baby.ttf");
+                                let font =
+                                    Font::try_from_bytes(data_).expect("Error Getting Font Bytes from the link");
+                                let gender = format!("Gender: {gender}");
+                                let age = format!("Age: {age_range}");
+                                let beard = format!("Beard: {beard}");
+                                let smile = format!("Smile: {smile}");
+                
+                                draw_text_mut(&mut image, color, 0, 0, scale, &font, &gender);
+                                draw_text_mut(&mut image, color, 0, 50, scale, &font, &age);
+                                draw_text_mut(&mut image, color, 0, 100, scale, &font, &beard);
+                                draw_text_mut(&mut image, color, 0, 150, scale, &font, &smile);
+                
+                                let modified_image_path_name =
+                                    format!("{face_details_images}{}", image_name.join(""));
+                                image
+                                    .save(&modified_image_path_name)
+                                    .expect("Error while writing Image file\n");
+                            }
+                        }
+                    }
+                
+                    remove_dir_all("read_images/").expect("Error while Deleting read_images/ temp dir");
+                    create_detect_face_image_pdf(&bucket_name, &bucket_path_prefix);
+                    println!(
+                        "{}\n",
+                        "Face details are written to the current directory with the name 'face_details.txt'"
+                            .green()
+                            .bold()
+                    );
+                    println!(
+                        "{}\n",
+                        "Images with face details are saved in the 'face_details_images' directory within the current path".green().bold()
+                    );
+                            }
+                            _ => println!("{}\n","Neither Bucket Name nor Bucket Path Prefix Can't be Empty".red().bold())
+                        }
+                    
+                        }
                         "Face detection\n" => {
                             let get_buckets = s3_ops.get_buckets().await;
                             let available_buckets =
@@ -995,10 +1200,14 @@ async fn main() {
                                         "The object names are in the {bucket_name} bucket and the URL should begin with: s3://{bucket_name}/ \n{}\n",
                                         object_names.join("\n")
                                     );
-                                    let format_of_s3_url = format!("Add the object key after this path: s3://{bucket_name}/");
+                                    let format_of_s3_url = format!(
+                                        "Add the object key after this path: s3://{bucket_name}/"
+                                    );
+                                    let initial_value = format!("s3://{bucket_name}/");
                                     let key_audio_name =
                     Text::new("Enter the S3 key that contains the audio content you wish to transcribe\n")
                         .with_placeholder(&available_object_names)
+                        .with_initial_value(&initial_value)
                         .with_formatter(&|str| format!(".....{str}.....\n"))
                         .with_help_message(&format_of_s3_url)
                         .prompt()
@@ -1058,8 +1267,7 @@ async fn main() {
                                                             .bold()
                                                     );
                                                 }
-                                                "IN_PROGRESS" => {
-                                                }
+                                                "IN_PROGRESS" => {}
                                                 "FAILED" => {
                                                     println!(
                                                         "{}\n",
@@ -1087,8 +1295,12 @@ async fn main() {
                             }
                         }
                         "Transcription Status\n" => {
-                            let job_name = Text::new("Please enter the job name to display its status\n")
-                             .with_placeholder("You assigned the job name when initiating the transcription task")
+                            let job_name = Text::new(
+                                "Please enter the job name to display its status\n",
+                            )
+                            .with_placeholder(
+                                "You assigned the job name when initiating the transcription task",
+                            )
                             .with_formatter(&|str| format!(".....{str}.....\n"))
                             .prompt()
                             .unwrap();
@@ -1111,11 +1323,14 @@ async fn main() {
                                                 "QUEUED" => {
                                                     println!(
                                                         "{}\n",
-                                                        "The job Status is QUEUED"
+                                                        "The job Status is QUEUED".yellow().bold()
+                                                    );
+                                                    println!(
+                                                        "{}\n",
+                                                        "Let's try again after some time"
                                                             .yellow()
                                                             .bold()
                                                     );
-                                                    println!("{}\n","Let's try again after some time".yellow().bold());
                                                 }
                                                 "IN_PROGRESS" => {
                                                     println!(
@@ -1124,7 +1339,12 @@ async fn main() {
                                                             .yellow()
                                                             .bold()
                                                     );
-                                                    println!("{}\n","Let's try again after some time".yellow().bold());
+                                                    println!(
+                                                        "{}\n",
+                                                        "Let's try again after some time"
+                                                            .yellow()
+                                                            .bold()
+                                                    );
                                                 }
                                                 "FAILED" => {
                                                     println!(
@@ -1400,7 +1620,7 @@ async fn main() {
 
                             let subject_path =Text::new("Please provide the path to the subject data in JSON format to create Subject for Email Template\n")
                                 .with_placeholder("The subject can contain template variables to personalize the email template's subject line\n")
-                                .with_help_message("An example subject template is available here ")
+                                .with_help_message("An example subject template is available here https://tinyurl.com/4etkub75 ")
                                 .with_formatter(&|input| format!("Received Subject Is: {input}\n"))
                                 .prompt()
                                 .unwrap();
@@ -1408,7 +1628,7 @@ async fn main() {
                             let template_path = Text::new("Please provide the path for the template in JSON format to Create a HTML body for the Email Template\n")
                                       .with_formatter(&|input| format!("Received Template Path Is: {input}\n"))
                                       .with_placeholder("")
-                                      .with_help_message("Example template is available at this location: https://tinyurl.com/4na92rph")
+                                      .with_help_message("Example template is available at this location: https://tinyurl.com/rmxwfc5v")
                                       .prompt()
                                       .unwrap();
                             
@@ -2287,7 +2507,7 @@ async fn main() {
                         "Modifying Object Visibility\n" => {
                             let get_bucket_name = s3_ops.get_buckets().await;
                             let available_bucket_name = format!(
-                                "Available bucket names in your account:\n {:?}\n",
+                                "Available bucket names in your account:\n {:#?}\n",
                                 get_bucket_name
                             );
                             let bucket_name = Text::new("Enter bucket name that contains the object to which you want to attach the ACL or Permission\n")
@@ -2360,7 +2580,12 @@ async fn main() {
                                     match object.is_empty() {
                                         false => {
                                             s3_ops
-                                                .download_content_from_bcuket(&bucket_name, &object)
+                                                .download_content_from_bcuket(
+                                                    &bucket_name,
+                                                    &object,
+                                                    None,
+                                                    true,
+                                                )
                                                 .await;
                                         }
                                         true => {

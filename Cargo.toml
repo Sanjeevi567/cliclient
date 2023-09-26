@@ -16,6 +16,9 @@ reqwest="0.11.20"
 
 tokio = {version ="1.32.0",features = ["macros","rt-multi-thread"]}
 dotenv ="0.15.0"
+image ="0.24.7"
+imageproc ="0.23.0"
+rusttype ="0.9.3"
 
 #Regex is employed for locating template variables within the provided data, especially when updating a template. 
 # This is particularly useful for providing information about the template during updates. It is also utilized in 
