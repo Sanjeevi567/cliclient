@@ -1618,16 +1618,16 @@ async fn main() {
                             .unwrap()
                             .unwrap();
 
-                            let subject_path =Text::new("Please provide the path to the subject data in JSON format to create Subject for Email Template\n")
+                            let subject_path =Text::new("Please provide the path to the subject data in HTML format to create Subject for Email Template\n")
                                 .with_placeholder("The subject can contain template variables to personalize the email template's subject line\n")
                                 .with_help_message("An example subject template is available here https://tinyurl.com/4etkub75 ")
                                 .with_formatter(&|input| format!("Received Subject Is: {input}\n"))
                                 .prompt()
                                 .unwrap();
 
-                            let template_path = Text::new("Please provide the path for the template in JSON format to Create a HTML body for the Email Template\n")
+                            let template_path = Text::new("Please provide the path for the template in HTML format to Create a HTML body for the Email Template\n")
                                       .with_formatter(&|input| format!("Received Template Path Is: {input}\n"))
-                                      .with_placeholder("")
+                                      .with_placeholder("The HTML body can contain both template variables and HTML content\n")
                                       .with_help_message("Example template is available at this location: https://tinyurl.com/rmxwfc5v")
                                       .prompt()
                                       .unwrap();
@@ -1635,7 +1635,7 @@ async fn main() {
                             let text_path =Text::new("Please provide the path to the text body for the email template\n")
                                 .with_placeholder("This section is optional, but it's essential to include for recipients who do not support HTML\n")
                                 .with_formatter(&|input| format!("Received Text Body Is: {input}\n"))
-                                .with_help_message("Example text body data is available here ")
+                                .with_help_message("Example text body data is available here https://tinyurl.com/ycy4sbmn")
                                 .prompt_skippable()
                                 .unwrap()
                                 .unwrap();
@@ -1665,6 +1665,7 @@ async fn main() {
                                                                  .expect("Error opening the Text Body file path you specified\n");
                                 let mut text_data = String::new();
                                 reading_text_data.read_to_string(&mut text_data).expect("Error opening the file path you specified\n");
+
                                 ses_ops.create_email_template(&template_name,&subject_data,&template_data,Some(text_data)).await;
                             }
                             true => {
