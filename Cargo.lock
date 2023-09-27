@@ -699,7 +699,7 @@ dependencies = [
 [[package]]
 name = "aws_apis"
 version = "0.1.0"
-source = "git+https://github.com/Sanjuvi/aws_apis.git#3d68e993c9c94fc565de42b867fa569c0eef9b99"
+source = "git+https://github.com/Sanjuvi/aws_apis.git#8b2902f22c3dbbec055b71761518f783c752155a"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -722,6 +722,7 @@ dependencies = [
  "image 0.24.7",
  "imageproc",
  "inquire",
+ "printpdf",
  "regex",
  "reqwest",
  "rusttype 0.9.3",

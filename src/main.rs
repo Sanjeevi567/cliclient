@@ -682,9 +682,9 @@ async fn main() {
                                     .expect("Error while reading the image from path\n");
                                 let scale = Scale::uniform(30.0);
                                 let color = Rgba([255u8, 0u8, 0u8, 127u8]);
-                                let data_ = include_bytes!("./../baby.ttf");
+                                let data_ = include_bytes!("./../assets/font.ttf");
                                 let font =
-                                    Font::try_from_bytes(data_).expect("Error Getting Font Bytes from the link");
+                                    Font::try_from_bytes(data_).expect("Error Getting Font Bytes");
                                 let gender = format!("Gender: {gender}");
                                 let age = format!("Age: {age_range}");
                                 let beard = format!("Beard: {beard}");
@@ -2212,7 +2212,7 @@ async fn main() {
                             .unwrap();
                     }
                     _ => {
-                        println!("{}\n","Please ensure the email field is not empty, and try again".red().bold());                      
+                        println!("{}\n","Please ensure that the fields are not empty, and then try again.".red().bold());                      
                     }
                 }
             }

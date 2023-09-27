@@ -1,8 +1,9 @@
 {
     "Name" : "sanjuvi",
     "Email" : "sanjeevimani567@gmail.com",
-    "name" : "Subject",
     "Blog": "https://sanjuvi.github.io/Blog/",
-    "Subject_Name" : "Demo",
+    "Lang" : "Rust",
+    "Author's_Name" : "Sanjeevi",
+    "Api": "AWS Simple Email Service(SES)",
     "Subject_Description" : "This the Subject template variable"
 }
