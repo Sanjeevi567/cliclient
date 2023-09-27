@@ -5,5 +5,4 @@
     "Lang" : "Rust",
     "Author's_Name" : "Sanjeevi",
     "Api": "AWS Simple Email Service(SES)",
-    "Subject_Description" : "This the Subject template variable"
 }
