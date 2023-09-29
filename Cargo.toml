@@ -8,10 +8,10 @@ edition = "2021"
 [dependencies]
 
 #Developing Terminal Applications
-inquire = {version = "0.6.2",features = ["editor"]}
-spinoff = "0.8.0"
+inquire = {version = "0.6.2"}
 colored = "2.0.4"
 aws_apis = {git = "https://github.com/Sanjuvi/aws_apis.git"}
+spinoff = "0.8.0"
 reqwest="0.11.20"
 
 tokio = {version ="1.32.0",features = ["macros","rt-multi-thread"]}
@@ -19,6 +19,7 @@ dotenv ="0.15.0"
 image ="0.24.7"
 imageproc ="0.23.0"
 rusttype ="0.9.3"
+serde_json = "1.0"
 
 #Regex is employed for locating template variables within the provided data, especially when updating a template. 
 # This is particularly useful for providing information about the template during updates. It is also utilized in 
