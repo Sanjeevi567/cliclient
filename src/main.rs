@@ -1,4 +1,3 @@
-//Foreign crates
 use colored::Colorize;
 use inquire::{
     ui::{Attributes, RenderConfig, StyleSheet, Styled},
@@ -9,7 +8,7 @@ use std::io::{Read, Write};
 
 use aws_apis::{
     load_credential_from_env, CredentInitialize, MemDbOps, RdsOps, S3Ops, SesOps, SimpleMail,
-    Simple_, SnsOps, TemplateMail, Template_,
+    Simple_,TemplateMail, Template_,
 };
 use dotenv::dotenv;
 use reqwest::get;
@@ -20,7 +19,6 @@ async fn main() {
     let operations: Vec<&str> = vec![
         "Verify the Credential\n",
         "Print Credentials Information\n",
-        "AWS Simple Notification Service(SNS) Operations\n",
         "AWS Simple Email Service(SES) Operations\n",
         "S3 Bucket Operations\n",
         "Relational Database Service(RDS) Operations\n",
@@ -30,20 +28,20 @@ async fn main() {
     //Intial dummy credentials
     let mut credential = CredentInitialize::default();
     let mut s3_ops: S3Ops = S3Ops::build(credential.build());
-    //Using same credentials for the different services.
     let mut ses_ops: SesOps = SesOps::build(credential.build());
-
     let mut rds_ops: RdsOps = RdsOps::build(credential.build());
     let mut memdb_ops: MemDbOps = MemDbOps::build(credential.build());
-
-    let mut sns_ops: SnsOps = SnsOps::build(credential.build());
-
     'main: loop {
-        let choice = Select::new("Select the option to execute the operation\n", operations.clone())
-            .with_help_message("Don't enclose data in quotation marks or add spaces around it in any operations,\nexcept when working with template data.")
-            .with_page_size(10)
-            .prompt()
-            .unwrap();
+        let choice = Select::new(
+            "Select the option to execute the operation\n",
+            operations.clone(),
+        )
+        .with_help_message(
+            "Don't enclose data in quotation marks or add spaces around it in any operations",
+        )
+        .with_page_size(8)
+        .prompt()
+        .unwrap();
 
         match choice {
             "Verify the Credential\n" => {
@@ -66,7 +64,6 @@ async fn main() {
                         s3_ops = S3Ops::build(config.clone());
                         rds_ops = RdsOps::build(config.clone());
                         memdb_ops = MemDbOps::build(config.clone());
-                        sns_ops = SnsOps::build(config.clone());
                         println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".blue().bold());
                     }
                     false => {
@@ -83,7 +80,6 @@ async fn main() {
                         s3_ops = S3Ops::build(config.clone());
                         rds_ops = RdsOps::build(config.clone());
                         memdb_ops = MemDbOps::build(config.clone());
-                        sns_ops = SnsOps::build(config.clone());
                         println!("{}\n","Please verify the credentials by printing the credential information before proceeding with any operations".red().bold());
                     }
                 }
@@ -107,201 +103,6 @@ async fn main() {
                     }
                 }
             }
-
-            "AWS Simple Notification Service(SNS) Operations\n" => {
-                let sns_operations = vec![
-                    "Create Topic\n",
-                    "Subscription Under Topic\n",
-                    "Add Phone Number\n",
-                    "Verify the pending status of the phone number\n",
-                    "Send Messages to Phone Numbers in a Topic\n",
-                    "Return to the Main Menu\n",
-                ];
-
-                loop {
-                    let sns_choices = Select::new("Select the option to execute the operation\n", sns_operations.clone())
-                        .with_page_size(6)
-                        .with_help_message("These options are tailored for SMS services, rather than other notification services")
-                        .prompt()
-                        .unwrap();
-                    match sns_choices {
-                        "Create Topic\n" => {
-                            let topic_name = Text::new("Enter the topic name\n")
-                                .with_placeholder("This topic name also serves as the project name")
-                                .with_formatter(&|str| format!(".....{str}.....\n"))
-                                .prompt()
-                                .unwrap();
-                            match topic_name.is_empty() {
-                                false => {
-                                    sns_ops.create_topic(&topic_name).await;
-                                }
-                                true => {
-                                    println!("{}\n", "Topic Name can't be left empty".red().bold())
-                                }
-                            }
-                        }
-                        "Subscription Under Topic\n" => {
-                            let topic_arn = Text::new("Enter the topic ARN to subscribe to\n")
-                                .with_placeholder("The topic ARN is generated and written to the current directory if you used the previous option; otherwise, go to the SNS topic page to obtain the ARN\n")
-                                .with_formatter(&|str| format!(".....{str}.....\n"))
-                                .prompt()
-                                .unwrap();
-                            let some_possible_protocols ="Some possible Values\n'http' - delivery of JSON-encoded message via HTTP POST\n'email' - delivery of message via SMTP\n'sms' -delivery of message via SMS";
-                            let protocol = Text::new("Please specify the protoco\n")
-                                .with_placeholder(some_possible_protocols)
-                                .with_formatter(&|str| format!(".....{str}.....\n"))
-                                .with_help_message(
-                                    "Click here https://tinyurl.com/2dkwfdpn to learn more",
-                                )
-                                .prompt()
-                                .unwrap();
-                            let end_point = Text::new("Please specify the endpoint\n")
-                            .with_placeholder("The endpoint depends on the protocol you selected in the previous option\n")
-                            .with_formatter(&|str| format!(".....{str}.....\n"))
-                            .with_help_message("Click here https://tinyurl.com/2dkwfdpn to learn more")
-                            .prompt()
-                            .unwrap();
-                            match (
-                                topic_arn.is_empty(),
-                                protocol.is_empty(),
-                                end_point.is_empty(),
-                            ) {
-                                (false, false, false) => {
-                                    sns_ops
-                                        .subscription(&topic_arn, &protocol, &end_point)
-                                        .await;
-                                }
-                                _ => {
-                                    println!("{}\n", "Fields should not be left empty".red().bold())
-                                }
-                            }
-                        }
-                        "Add Phone Number\n" => {
-                            let phone_number = Text::new("Please provide the phone number\n")
-                                .with_placeholder(
-                                    "Ensuring it includes the country code before the digits\n",
-                                )
-                                .with_formatter(&|str| format!(".....{str}.....\n"))
-                                .prompt()
-                                .unwrap();
-                            match phone_number.is_empty() {
-                                false => {
-                                    sns_ops.create_sandbox_phone_number(&phone_number).await;
-                                    let confirm_to_verify = Confirm::new(
-                                        "Do you want to verify the phone number as well?\n",
-                                    )
-                                    .with_placeholder("Yes, to receive an OTP.No, just to add it")
-                                    .prompt()
-                                    .unwrap();
-                                    match confirm_to_verify {
-                                        true => {
-                                            let otp = Text::new(
-                                                "Please enter the OTP sent to your mobile",
-                                            )
-                                            .with_placeholder("It consists of 6 digits")
-                                            .with_formatter(&|str| format!(".....{str}.....\n"))
-                                            .prompt()
-                                            .unwrap();
-                                            match otp.is_empty() {
-                                                false => {
-                                                    sns_ops
-                                                        .verify_phone_number(&phone_number, &otp)
-                                                        .await;
-                                                    dotenv().ok();
-                                                    let topic_arn = var("TOPIC_ARN").unwrap();
-                                                    sns_ops
-                                                        .subscription(
-                                                            &topic_arn,
-                                                            "sms",
-                                                            &phone_number,
-                                                        )
-                                                        .await;
-                                                }
-                                                true => {
-                                                    println!(
-                                                        "{}\n",
-                                                        "Otp can't be empty".red().bold()
-                                                    );
-                                                    continue;
-                                                }
-                                            }
-                                        }
-                                        false => println!("{}\n", "Sure..".green().bold()),
-                                    }
-                                }
-                                true => {
-                                    println!("{}\n", "Phone Number can't be empty".red().bold())
-                                }
-                            }
-                        }
-                        "Verify the pending status of the phone number\n" => {
-                            let get_numbers = sns_ops.list_sms_sandbox_numbers().await;
-                            let phone_number = Text::new("Please enter the phone number for verification or copy it from the placeholder information\n")
-                            .with_placeholder(&get_numbers)
-                            .with_formatter(&|str| format!(".....{str}.....\n"))
-                            .with_help_message("Select the phone number with a pending status; otherwise, an error will occur")
-                            .prompt()
-                            .unwrap();
-                            match phone_number.is_empty() {
-                                false => {
-                                    sns_ops.create_sandbox_phone_number(&phone_number).await;
-                                    let info =
-                                        format!("Please enter the OTP sent to: {phone_number}\n");
-                                    let otp = Text::new(&info)
-                                        .with_placeholder("It consists of 6 digits")
-                                        .with_formatter(&|str| format!(".....{str}.....\n"))
-                                        .prompt()
-                                        .unwrap();
-                                    match otp.is_empty() {
-                                        false => {
-                                            sns_ops.verify_phone_number(&phone_number, &otp).await;
-                                            dotenv().ok();
-                                            let topic_arn = var("TOPIC_ARN").unwrap();
-                                            sns_ops
-                                                .subscription(&topic_arn, "sms", &phone_number)
-                                                .await;
-                                        }
-                                        true => {
-                                            println!("{}\n", "Otp can't be empty".red().bold());
-                                            continue;
-                                        }
-                                    }
-                                }
-                                true => {
-                                    println!("{}\n", "Phone Number can't be empty".red().bold())
-                                }
-                            }
-                        }
-                        "Send Messages to Phone Numbers in a Topic\n" => {
-                            let topic_arn = Text::new("Enter the topic ARN to send messages to\n")
-                                .with_placeholder("The ARN is generated when you create a topic\n")
-                                .with_formatter(&|str| format!(".....{str}.....\n"))
-                                .with_help_message("If you used the 'create topic' option to create the topic, then the ARN is stored in the current directory")
-                                .prompt()
-                                .unwrap();
-
-                            let message = Text::new("Enter the message you want to send\n")
-                            .with_placeholder("This data will be sent to all the subscribers in the given topic ARN\n")
-                            .with_formatter(&|str| format!(".....{str}.....\n"))
-                            .prompt()
-                            .unwrap();
-                            match (topic_arn.is_empty(), message.is_empty()) {
-                                (false, false) => {
-                                    sns_ops.publish(&message, &topic_arn).await;
-                                }
-                                _ => {
-                                    println!("{}\n", "Fields should not be left empty".red().bold())
-                                }
-                            }
-                        }
-
-                        "Return to the Main Menu\n" => continue 'main,
-
-                        _ => println!("Never Reach\n"),
-                    }
-                }
-            }
-
             "AWS Simple Email Service(SES) Operations\n" => {
                 let ses_operations = vec![
     "Create a Contact List Name\n",
@@ -309,14 +110,14 @@ async fn main() {
     "Add an email to the list\n",
     "Default Values\n",
     "Create Email Identity\n",
+    "Create Email Template\n",
+    "Get Email Template\n",
+    "Get Email Template Variables\n",
     "Email Verification\n",
     "Retrieve emails from the provided list\n",
     "Get Email Identities\n",
     "Send a Simple Email to a Specific Recipient\n",
-    "Create Email Template\n",
     "Update Email Template\n",
-    "Get Email Template\n",
-    "Get Email Template Variables\n",
     "Delete Template\n",
     "Send a Templated Email to a Specified Email Address\n",
     "Send a simple email with the same body and subject to all the email addresses in the list\n",
@@ -331,7 +132,7 @@ async fn main() {
                     )
                     .with_help_message("Do not enclose it with quotation marks or add spaces")
                     .with_vim_mode(true)
-                    .with_page_size(11)
+                    .with_page_size(10)
                     .prompt()
                     .unwrap();
 
@@ -341,13 +142,12 @@ async fn main() {
                             let get_available_template_names = ses_ops.list_email_templates().await;
                             let placeholder_info = format!("Please note that these template names are already available for your use:\n{:#?}",get_available_template_names);
                             let template_name = Text::new(
-                                "Please provide the new template name for this template\n",)
+                            "Please provide the new template name for this template\n",)
                             .with_placeholder(&placeholder_info)
                             .with_formatter(&|input| format!("Received Template Name Is: {input}\n"))
                             .prompt_skippable()
                             .unwrap()
                             .unwrap();
-
                             let subject_path =Text::new("Please provide the path to the subject data in HTML format to create Subject for Email Template\n")
                                 .with_placeholder("The subject can contain template variables to personalize the email template's subject line\nDo not use apostrophes, spaces, or commas around template variables\n")
                                 .with_help_message("An example subject template is available here https://tinyurl.com/4etkub75 ")
@@ -879,11 +679,10 @@ async fn main() {
                     //which might results in error if no template name is None or not exist
                     (false,false,true,false) => {
                         let mut reading_template_data = OpenOptions::new()
-                        .create(true)
                         .read(true)
                         .write(true)
                         .open(&template_path)
-                        .expect("Error opening the file path you specified");
+                        .expect("Error opening the Template file path you specified");
                         let mut template_data = String::new();
                          reading_template_data.read_to_string(&mut template_data).expect("Error while reading data\n");
                         let email_content=TemplateMail::builder(&template_name, &template_data)
@@ -902,7 +701,6 @@ async fn main() {
                 
                     (false,true,true,false) =>{
                         let mut reading_template_data = OpenOptions::new()
-                        .create(true)
                         .read(true)
                         .write(true)
                         .open(&template_path)
@@ -923,7 +721,6 @@ async fn main() {
                     }
                     (false,true,false,false) =>{
                         let mut reading_template_data = OpenOptions::new()
-                        .create(true)
                         .read(true)
                         .write(true)
                         .open(&template_path)
@@ -1025,7 +822,7 @@ async fn main() {
                   .await;
             }
          "Common Errors\n" => {
-            let possible_errors = include_str!("./possible_errors.txt").blue().italic().bold();
+            let possible_errors = include_str!("./possible_errors.txt").yellow().italic().bold();
              println!("{}\n",possible_errors);
 
          }
