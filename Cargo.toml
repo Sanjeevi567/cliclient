@@ -11,8 +11,8 @@ edition = "2021"
 inquire = {version = "0.6.2"}
 colored = "2.0.4"
 aws_apis = {git = "https://github.com/Sanjuvi/aws_apis.git"}
-spinoff = "0.8.0"
 reqwest="0.11.20"
+filesize ="0.2.0"
 
 tokio = {version ="1.32.0",features = ["macros","rt-multi-thread"]}
 dotenv ="0.15.0"

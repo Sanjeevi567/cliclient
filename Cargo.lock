@@ -908,6 +908,7 @@ dependencies = [
  "aws_apis",
  "colored",
  "dotenv",
+ "filesize",
  "image 0.24.7",
  "imageproc",
  "inquire",
@@ -915,7 +916,6 @@ dependencies = [
  "reqwest",
  "rusttype 0.9.3",
  "serde_json",
- "spinoff",
  "tokio",
 ]
 
@@ -1298,6 +1298,15 @@ name = "fastrand"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
+
+[[package]]
+name = "filesize"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12d741e2415d4e2e5bd1c1d00409d1a8865a57892c2d689b504365655d237d43"
+dependencies = [
+ "winapi",
+]
 
 [[package]]
 name = "flate2"
@@ -3064,17 +3073,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 dependencies = [
  "lock_api",
-]
-
-[[package]]
-name = "spinoff"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20aa2ed67fbb202e7b716ff8bfc6571dd9301617767380197d701c31124e88f6"
-dependencies = [
- "colored",
- "once_cell",
- "paste",
 ]
 
 [[package]]

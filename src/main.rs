@@ -8,7 +8,7 @@ use std::io::{Read, Write};
 
 use aws_apis::{
     load_credential_from_env, CredentInitialize, MemDbOps, RdsOps, S3Ops, SesOps, SimpleMail,
-    Simple_,TemplateMail, Template_,
+    Simple_, TemplateMail, Template_,
 };
 use dotenv::dotenv;
 use reqwest::get;
@@ -1022,13 +1022,83 @@ async fn main() {
 
                             match (object.is_empty(), bucket_name.is_empty(), key.is_empty()) {
                                 (false, false, false) => {
+                                    use filesize::PathExt;
+                                    use std::path::Path;
+                                    let path = Path::new(&object);
+                                    let file_size = match path.symlink_metadata() {
+                                        Ok(metadata) => match path.size_on_disk_fast(&metadata) {
+                                            Ok(realsize) => Some(realsize),
+                                            Err(_) => None,
+                                        },
+                                        Err(_) => None,
+                                    };
+                                    match file_size {
+                                        Some(size) => {
+                                            let msg = format!(
+                                                "Uploading the file '{}' and its size is: {} Mb\n",
+                                                object.green().bold(),
+                                                (size / (1024 * 1024)).to_string().green().bold()
+                                            );
+                                            println!("{msg}");
+                                            let size_in_mb = size / (1024 * 1024);
+                                            if size_in_mb < 50 {
+                                                println!(
+                                                    "{}\n",
+                                                    "It will take less than a minute to upload the content"
+                                                        .yellow()
+                                                        .bold()
+                                                );
+                                            } else if size_in_mb * 1024 < 1048576 {
+                                                let guessed_minutes = size_in_mb / (50 * 50);
+                                                println!("It will take approximately '{}' minutes to upload content, so please be patient\n",guessed_minutes.to_string().yellow().bold());
+                                            } else if size_in_mb * 1024 > 1048576 {
+                                                let guessed_hours = size_in_mb / (50 * 50);
+                                                if guessed_hours == 0 | 1 {
+                                                    println!("It will take approximately '{}' hour to upload content, so you can accomplish other tasks while it's uploading\n",guessed_hours.to_string().yellow().bold());
+                                                } else {
+                                                    println!("It will take approximately '{}' hours to upload content, so you can accomplish other tasks while it's uploading\n",guessed_hours.to_string().yellow().bold());
+                                                }
+                                            }
+                                        }
+                                        None => {
+                                            let msg = format!(
+                                                "Uploading the file'{}'\n",
+                                                object.green().bold()
+                                            );
+                                            println!("{msg}");
+                                            println!("{}\n","No file size information is available; you can either wait or engage in other tasks while the uploading process is in progress".yellow().bold());
+                                        }
+                                    };
+                                    let start_time = std::time::SystemTime::now();
                                     s3_ops
                                         .upload_content_to_a_bucket(&bucket_name, &object, &key)
                                         .await;
+                                    let end_time = start_time.elapsed().expect(
+                                        "Error while converting to duration from system time\n",
+                                    );
+                                    if end_time.as_secs() < 60 {
+                                        println!(
+                                            "It took '{}' seconds to update the file",
+                                            end_time.as_secs().to_string().yellow().bold()
+                                        );
+                                    } else if end_time.as_secs() < 36000 {
+                                        println!(
+                                            "Uploading the provided content required '{}' minutes",
+                                            (end_time.as_secs() / 60).to_string().yellow().bold()
+                                        );
+                                    } else {
+                                        println!(
+                                            "Uploading the provided content required '{}' hours",
+                                            (end_time.as_secs() / (60 * 60))
+                                                .to_string()
+                                                .yellow()
+                                                .bold()
+                                        );
+                                    };
                                 }
 
                                 _ => {
-                                    println!("{}\n", "Data ,the key/object name or the bucket name can't be empty".red().bold())
+                                    println!("{}\n", "Data path,the key/object name or the bucket name can't be empty".red().bold())
                                 }
                             }
                         }
