@@ -88,7 +88,8 @@ async fn main() {
                 let confirm =
                     Confirm::new("Are you sure you want to print credential information?\n")
                         .with_formatter(&|str| format!(".....{str}.....\n"))
-                        .with_placeholder("This is solely for verification purposes\n")
+                        .with_placeholder("Type 'Yes' to view the credentials, or 'No' to not view the credentials\n")
+                        .with_help_message("This is solely for verification purposes")
                         .with_default(false)
                         .prompt()
                         .unwrap();
@@ -120,8 +121,8 @@ async fn main() {
     "Update Email Template\n",
     "Delete Template\n",
     "Send a Templated Email to a Specified Email Address\n",
-    "Send a simple email with the same body and subject to all the email addresses in the list\n",
-    "Send templated Emails\n",
+    "Send a bulk of Simple Email Contents\n",
+    "Send a Bulk of Templated Email Contents\n",
     "Common Errors\n",
     "Return to the Main Menu\n",
     ];
@@ -405,19 +406,15 @@ async fn main() {
                                 
                 match (list_name.is_empty(),email.is_empty(),to_verified) {
                     (false,false,false) => {
-                        println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                         ses_ops.create_email_contact_without_verification(&email, Some(&list_name)).await;
                     },
                     (false,false,true) =>{
-                        println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                         ses_ops.create_email_contact_with_verification(&email,Some(&list_name)).await;
                     }
                    (true,false,false) =>{
-                      println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                        ses_ops.create_email_contact_without_verification(&email,None).await;
                    }
                    (true,false,true) =>{
-                    println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                       ses_ops.create_email_contact_with_verification(&email,None).await;
                    }
                     _ => println!("{}\n","No email is received".red().bold()),
@@ -445,7 +442,6 @@ async fn main() {
                                     .unwrap();
                         match email_to_verify.is_empty(){
                             false => {
-                                println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                                match ses_ops
                                     .is_email_verfied(&email_to_verify)
                                      .await{
@@ -744,7 +740,7 @@ async fn main() {
                     }
                 }
             }
-            "Send a simple email with the same body and subject to all the email addresses in the list\n" => {
+            "Send a bulk of Simple Email Contents\n" => {
                  
                 let get_from_address = ses_ops.get_from_address();
                 let get_list_name=ses_ops.get_list_name();
@@ -752,18 +748,19 @@ async fn main() {
                 let default_from_address = format!("Default from_address is: {}\n",get_from_address);
                 let default_list_name = format!("Default list name is: {}\n",get_list_name);   
 
-                let list_name = Text::new("Enter the list name..\n")
+                let list_name = Text::new("Please provide the name of the Contact List where all your verified emails are stored\n")
                     .with_placeholder(&default_list_name)
-                    .with_formatter(&|str| format!(".....{str}.....\n"))
+                    .with_formatter(&|input| format!("The Simple Email Content will be sent to each email address in the: {input} Contact List\n"))
                     .prompt_skippable()
                     .unwrap()
                     .unwrap_or(ses_ops.get_list_name().into());
-                let body = Text::new("Body details\n")
-                    .with_placeholder("The body data is the same for all emails..\n")
-                    .with_formatter(&|str| format!(".....{str}.....\n"))
-                    .prompt()
-                    .unwrap();
-                let subject = Text::new("Enter the subject name\n")
+                let body_info = Confirm::new("You can either provide the email body from a local file path or any S3 object URLs can be passed, and they should be publicly accessible. Not all links provide the exact content we requested\n")
+                .with_formatter(&|str| format!(".....{str}....."))
+                .with_placeholder("Please respond with 'Yes' to provide a local file or 'No' to provide a S3 Object Url link\n")
+                .with_help_message("The body data is the same for all emails in the list")
+                .prompt()
+                .unwrap();
+                let subject = Text::new("Please enter the subject content that all your subscribers should be aware of\n")
                     .with_placeholder("The subject is the same for all emails\n")
                     .with_formatter(&|str| format!(".....{str}.....\n"))
                     .prompt()
@@ -774,37 +771,92 @@ async fn main() {
                              .prompt_skippable()
                              .unwrap()
                              .unwrap();
-                let simple_data = SimpleMail::builder(&body, &subject);
-                match (subject.is_empty(),body.is_empty()){
-                    (false,false)=>{
-                          match (list_name.is_empty(),from_address.is_empty()){
-                            (false,false) => {
-                                 ses_ops
-                                .send_multi_email_with_simple(simple_data, Some(&from_address), Some(&list_name))
-                                .await; 
-                            }
-                            (true,true) =>{
-                                ses_ops
-                                .send_multi_email_with_simple(simple_data, None, None)
-                                .await;
-                            }
-                            (false,true) =>{
-                                ses_ops
-                                .send_multi_email_with_simple(simple_data, None, Some(&list_name))
-                                .await;
-                            }
-                            (true,false) =>{
-                               ses_ops
-                                .send_multi_email_with_simple(simple_data, Some(&from_address), None)
-                                .await;
-                            }
-                          }
+                
+                match (subject.is_empty(), body_info) {
+                    (false, true) => {
+                        let body_path = Text::new("Please provide the path to the body of a simple email content file\n")
+                        .with_formatter(&|str| format!(".....{str}....."))
+                        .with_placeholder("Any file extension is acceptable as long as it can be read and contains only text content or an HTML body, without any template variables\n")
+                        .with_help_message("You can find an example of simple email content here ")
+                        .prompt()
+                        .unwrap();
+                        let body_data = std::fs::read_to_string(&body_path).expect("Error Opening the simple email file path you specified\n");
+                    let simple_data = SimpleMail::builder(&body_data, &subject);
+                    match (list_name.is_empty(),from_address.is_empty()){
+                        (false,false) => {
+                             ses_ops
+                            .send_multi_email_with_simple(simple_data, Some(&from_address), Some(&list_name))
+                            .await; 
+                        }
+                        (true,true) =>{
+                            ses_ops
+                            .send_multi_email_with_simple(simple_data, None, None)
+                            .await;
+                        }
+                        (false,true) =>{
+                            ses_ops
+                            .send_multi_email_with_simple(simple_data, None, Some(&list_name))
+                            .await;
+                        }
+                        (true,false) =>{
+                           ses_ops
+                            .send_multi_email_with_simple(simple_data, Some(&from_address), None)
+                            .await;
+                        }
+                      }
+                          
                     }
-                    _ => println!("{}\n","Both body and subject can't be empty".red().bold()),
+                    (false,false) => {
+                        let body_link = Text::new("Please provide the link to the body of a simple email content file\n")
+                        .with_formatter(&|str| format!(".....{str}....."))
+                        .with_placeholder("Any file extension is acceptable as long as it can be read and contains only text content or an HTML body, without any template variables\n")
+                        .with_help_message("Here is the S3 object URL that you can use to send an email or open a link to access the content:\n https://tinyurl.com/mr22bh4f")
+                        .prompt()
+                        .unwrap();
+                        match get(&body_link).await{
+                            Ok(body) => {
+                                let body_data = body.text().await.expect("Error while getting text data\n");
+                                let x: &[_] = &['\n','\r',' ','\x1b','\u{20}','\u{7f}','\u{80}'];
+                                let body_data = body_data.trim_matches(x);
+                                let simple_data = SimpleMail::builder(&body_data, &subject);
+                                match (list_name.is_empty(),from_address.is_empty()){
+                                    (false,false) => {
+                                         ses_ops
+                                        .send_multi_email_with_simple(simple_data, Some(&from_address), Some(&list_name))
+                                        .await; 
+                                    }
+                                    (true,true) =>{
+                                        ses_ops
+                                        .send_multi_email_with_simple(simple_data, None, None)
+                                        .await;
+                                    }
+                                    (false,true) =>{
+                                        ses_ops
+                                        .send_multi_email_with_simple(simple_data, None, Some(&list_name))
+                                        .await;
+                                    }
+                                    (true,false) =>{
+                                       ses_ops
+                                        .send_multi_email_with_simple(simple_data, Some(&from_address), None)
+                                        .await;
+                                    }
+                                  }
+
+                            }
+                            Err(_) => println!("{}\n","The provided link doesn't seem to be working. Could you please check the link and try again?".red().bold())
+                        }
+                        
+                        
+                          
+                    }
+                    _ => {
+                        println!("{}\n","Email,subject or body can't be empty".red().bold());
+                    }
                 }
+               
             }
 
-            "Send templated Emails\n" => {
+            "Send a Bulk of Templated Email Contents\n" => {
                 let get_from_address = ses_ops.get_from_address();
                 let get_template_name = ses_ops.get_template_name();
                 let get_list_name=ses_ops.get_list_name();
@@ -888,7 +940,6 @@ async fn main() {
                             println!("Default Region Name: {default_region_name}\n");
                         }
                         "Get Bucket Lists\n" => {
-                            println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                             let bucket_lists = s3_ops.get_buckets().await;
                             for bucket in bucket_lists {
                                 println!("    {}\n", bucket.green().bold());
@@ -908,7 +959,6 @@ async fn main() {
 
                             match bucket_name.is_empty() {
                                 false => {
-                                    println!("{}\n","Data is retrieved from the internet, a process that takes seconds.".blue().bold());
                                     let object_names =
                                         s3_ops.retrieve_keys_in_a_bucket(&bucket_name).await;
                                     for object in object_names {

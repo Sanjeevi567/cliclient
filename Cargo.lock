@@ -724,7 +724,7 @@ dependencies = [
 [[package]]
 name = "aws_apis"
 version = "0.1.0"
-source = "git+https://github.com/Sanjuvi/aws_apis.git#91f9c05f8201be8f8f8eb9203628617d3fb3b477"
+source = "git+https://github.com/Sanjuvi/aws_apis.git#e854094c1a40e8b415b65a460408974a0aaeec2b"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -744,6 +744,7 @@ dependencies = [
  "colored",
  "dotenv",
  "fast_qr",
+ "filesize",
  "genpdf",
  "image 0.24.7",
  "image_compressor",
