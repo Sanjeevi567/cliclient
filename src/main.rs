@@ -99,8 +99,8 @@ async fn main() {
 
                 match confirm {
                     true => {
-                        println!("Here is your credential informations\n");
-                        println!("{:#?}", credential.get_credentials());
+                        println!("Here is your credential informations");
+                        println!("{:#?}\n", credential.get_credentials());
                     }
                     false => {
                         println!("{}\n", "Sure...".green().bold())
@@ -412,7 +412,7 @@ async fn main() {
                                         "Subject Template Variables if any".yellow().bold()
                                     );
                                     subject_variables.into_iter().for_each(|variable| {
-                                        println!("{}", variable.green().bold());
+                                        println!("    {}", variable.green().bold());
                                     });
                                     println!("");
                                     println!(
@@ -420,7 +420,7 @@ async fn main() {
                                         "HTML Template Variables if any".yellow().bold()
                                     );
                                     html_variables.into_iter().for_each(|variable| {
-                                        println!("{}", variable.green().bold());
+                                        println!("    {}", variable.green().bold());
                                     });
                                     println!("");
                                 }
@@ -898,7 +898,7 @@ async fn main() {
                                                             "Error while sending template mail\n",
                                                         );
                                                 } else {
-                                                    println!("The provided email '{}' has not been verified. Please execute the 'Create Email Identity' option to verify the email address, and then proceed with this one",email.yellow().bold());
+                                                    println!("The provided email '{}' has not been verified. Please execute the 'Create Email Identity' option to verify the email address, and then proceed with this one\n",email.yellow().bold());
                                                 }
                                             }
                                             (true, true, false) => {
@@ -1406,17 +1406,17 @@ async fn main() {
                                     );
                                     if end_time.as_secs() < 60 {
                                         println!(
-                                            "It took '{}' seconds to update the file",
+                                            "It took '{}' seconds to update the file\n",
                                             end_time.as_secs().to_string().yellow().bold()
                                         );
                                     } else if end_time.as_secs() < 36000 {
                                         println!(
-                                            "Uploading the provided content required '{}' minutes",
+                                            "Uploading the provided content required '{}' minutes\n",
                                             (end_time.as_secs() / 60).to_string().yellow().bold()
                                         );
                                     } else {
                                         println!(
-                                            "Uploading the provided content required '{}' hours",
+                                            "Uploading the provided content required '{}' hours\n",
                                             (end_time.as_secs() / (60 * 60))
                                                 .to_string()
                                                 .yellow()
@@ -1837,9 +1837,9 @@ async fn main() {
                                                     let colored_endpoint_with_port =
                                                         endpoint_with_port.blue().bold();
                                                     let colored_db_name = db_name.blue().bold();
-                                                    println!("Username: {colored_username}\n");
-                                                    println!("Endpoint with port: {colored_endpoint_with_port}\n");
-                                                    println!("Db Name: {colored_db_name}\n");
+                                                    println!("Username: {colored_username}");
+                                                    println!("Endpoint with port: {colored_endpoint_with_port}");
+                                                    println!("Db Name: {colored_db_name}");
                                                     let status_ = rds_ops
                                                         .status_of_db_instance(Some(
                                                             &db_instance_identifier,
@@ -1932,9 +1932,9 @@ async fn main() {
                                                     let colored_endpoint_with_port =
                                                         endpoint_with_port.blue().bold();
                                                     let colored_db_name = db_name.blue().bold();
-                                                    println!("Username: {colored_username}\n");
-                                                    println!("Endpoint with port: {colored_endpoint_with_port}\n");
-                                                    println!("Db Name: {colored_db_name}\n");
+                                                    println!("Username: {colored_username}");
+                                                    println!("Endpoint with port: {colored_endpoint_with_port}");
+                                                    println!("Db Name: {colored_db_name}");
                                                     let status_ = rds_ops
                                                         .status_of_db_instance(Some(
                                                             &db_instance_identifier,
